@@ -1,0 +1,158 @@
+---
+title: "Project4_6723_botelho3"
+author: "botelho3"
+date: '2022-12-04'
+output:
+  html_document:
+    toc: yes
+    df_print: paged
+  html_notebook:
+    theme: readable
+    toc: yes
+    toc_float: yes
+---
+
+
+```{r warning=FALSE, include=FALSE}
+library(recommenderlab)
+library(Matrix)
+```
+
+## Read in Data
+
+```{r output=FALSE}
+ratings = read.csv('ratings.dat', 
+                   sep = ':',
+                   colClasses = c('integer', 'NULL'), 
+                   header = FALSE)
+colnames(ratings) = c('UserID', 'MovieID', 'Rating', 'Timestamp')
+ratings$Timestamp = NULL
+```
+
+
+## Evaluation 1
+
+```{r}
+set.seed(6723)
+train.id = sample(nrow(ratings), floor(nrow(ratings)) * 0.8)
+train = ratings[train.id, ]
+head(train)
+```
+
+```{r}
+test = ratings[-train.id, ]
+head(test)
+```
+
+
+
+
+## Recommender System
+
+```{r}
+i = paste0('u', train$UserID)
+j = paste0('m', train$MovieID)
+x = train$Rating
+tmp = data.frame(i, j, x, stringsAsFactors = T)
+Rmat = sparseMatrix(as.integer(tmp$i), as.integer(tmp$j), x = tmp$x)
+rownames(Rmat) = levels(tmp$i)
+colnames(Rmat) = levels(tmp$j)
+Rmat = new('realRatingMatrix', data = Rmat)
+```
+
+
+```{r}
+range(train$MovieID)
+length(unique(train$MovieID))
+```
+
+
+```{r}
+range(train$UserID)
+length(unique(train$UserID))
+```
+
+
+```{r}
+dim(Rmat)
+```
+
+
+```{r}
+rec_UBCF = Recommender(Rmat, method = 'UBCF',
+                  parameter = list(normalize = 'Z-score', 
+                                   method = 'Cosine', 
+                                   nn = 25))
+#Summary of model parameters
+rec_UBCF@model
+```
+
+
+```{r}
+# predict ratings for the first three users
+recom = predict(rec_UBCF, 
+                Rmat[1:3], type = 'ratings')
+```
+
+
+```{r}
+as(recom, 'matrix')[, 1:10]
+as(Rmat, 'matrix')[1:3, 1:10]
+```
+
+```{r}
+# This may take a long time
+recom = predict(rec_UBCF, 
+                Rmat, type = 'ratings')  
+rec_list = as(recom, 'list')  # each element are ratings of that user
+
+test.pred = test
+test.pred$rating = NA
+
+# For all lines in test file, one by one
+for (u in 1:nrow(test)){
+
+    # Read userid and movieid from columns 2 and 3 of test data
+    userid = as.numeric(test$UserID[u])
+    movieid = as.numeric(test$MovieID[u])
+    
+    rating = rec_list[[userid]][movieid]
+    # handle missing values; 2.5 might not be the ideal choice
+    test.pred$rating[u] = ifelse(is.na(rating), 2.5, rating)
+}
+
+# Calculate RMSE
+sqrt(mean((test$rating - test.pred$rating)^2)) 
+```
+
+```{r}
+recommenderRegistry$get_entry_names()
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
