@@ -130,23 +130,29 @@ tmp %>% ggplot(aes(ratings_per_movie)) +
 
 ```{r}
 small_image_url = "https://liangfgithub.github.io/MovieImages/"
-ratings %>% 
+blah = ratings %>% 
   group_by(MovieID) %>% 
   summarize(ratings_per_movie = n(), 
             ave_ratings = round(mean(Rating), dig=3)) %>%
   inner_join(movies, by = 'MovieID') %>%
   filter(ratings_per_movie > 1000) %>%
   top_n(10, ave_ratings) %>%
-  mutate(Image = paste0('<img src="', 
-                        small_image_url, 
-                        MovieID, 
-                        '.jpg?raw=true"></img>')) %>%
+  # mutate(Image = paste0('<img src="',
+  #                       small_image_url,
+  #                       MovieID,
+  #                       '.jpg?raw=true"></img>')) %>%
+  mutate(Image = mapply(function(x) paste0(
+    "<img src=\"",
+    base64enc::dataURI(file=paste0("MovieImages/", x, ".jpg"), mime="image/jpeg"),
+    "\"></img>"), 
+    MovieID)) %>%
   select('Image', 'Title', 'ave_ratings') %>%
   arrange(desc(-ave_ratings)) %>%
   datatable(class = "nowrap hover row-border", 
             escape = FALSE, 
             options = list(dom = 't',
                           scrollX = TRUE, autoWidth = TRUE))
+blah
 ```
 
 
