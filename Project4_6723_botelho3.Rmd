@@ -489,6 +489,162 @@ head(prev[!duplicated(prev$MovieID), ], n = 30)
 
 
 
+```{r}
+set.seed(6723)
+library(recommenderlab)
+library(proxy)
+library(testit)
+ratings = read.csv('ratings.dat', 
+                   sep = ':',
+                   colClasses = c('integer', 'NULL'), 
+                   header = FALSE)
+colnames(ratings) = c('UserID', 'MovieID', 'Rating', 'Timestamp')
+i = paste0('u', ratings$UserID)
+j = paste0('m', ratings$MovieID)
+x = ratings$Rating
+tmp = data.frame(i, j, x, stringsAsFactors = T)
+Rmat = sparseMatrix(as.integer(tmp$i), as.integer(tmp$j), x = tmp$x)
+rownames(Rmat) = levels(tmp$i)
+colnames(Rmat) = levels(tmp$j)
+M = dim(Rmat)[1]  # users
+N = dim(Rmat)[2]  # ratings
+Rmat = new('realRatingMatrix', data = Rmat)
+
+train = Rmat[1:500, ]
+test = Rmat[501, ]
+```
+
+
+
+
+### UBCF Recommendation
+
+**My Implementation**
+
+```{r}
+# center
+nn = 20
+M = 500
+N = N
+
+newdata = as(test, "matrix")
+newuser.means = rowMeans(newdata, na.rm = TRUE)
+newdata = newdata - newuser.means
+#newdata = t(newdata)
+# assert(dim(newdata) == c(N, 1))
+
+data = as(train, "matrix")
+user.means = rowMeans(data, na.rm = TRUE)
+data = data - user.means
+assert(dim(data) == c(M, N))
+
+sim1 = proxy::simil(data, newdata, method = "cosine")
+sim1 = (1 + sim1)/2
+class(sim1)
+
+sim1_mat <- `dim<-`(c(sim1), dim(sim1))
+sim_df = data.frame(
+    id = rownames(sim1),
+    x = sim1_mat) %>%
+  arrange(desc(x)) %>%
+  head(nn)
+  # top_n(nn)
+#tail(order(sim1[,1], decreasing = FALSE), 30)
+knn_rows = head(order(sim1[,1], decreasing = TRUE), nn)
+
+# 20x3706 i.e. nn x N
+knn_mat = data[knn_rows,]
+assert(dim(knn_mat)[1] == nn)
+
+# nnx1 % t(N,1) -> nn x N i.e. 20 x 3706
+# Note similarity matrix might have NA in it.
+s_coeff_mat = as.matrix(sim$x) %*% t(rep(1, N))
+# scalar * nnxN * nnxN
+r = (1 / sum(sim$x)) * s_coeff_mat * knn_mat
+# nn x N -> vec len N
+r = colMeans(r, na.rm = TRUE)
+assert(length(r) == N)
+mypred = r
+
+# Clean up mypred
+test_user_watched = !is.na(newdata)
+assert(length(test_user_watched) == N)
+mypred = mypred + user.means
+mypred[which(is.infinite(mypred))] = NA
+mypred[which(test_user_watched)] = NA
+
+
+# # Calculate L2 norm of each row.
+# # row_norms = apply(sim, 1, norm, type=c("f"))
+# # row_norms = norm(tc, type="f") * as.matrix(row_norms)
+# row_norms = 1.0 / (as.matrix(sqrt(Matrix::rowSums(sim^2))) * norm(data, type="F"))
+# assert(dim(row_norms) == c(M, 1))
+# sim = (sim %*% data) * row_norms
+# assert(dim(sim) == c(M,1))
+# # Transform range.
+# sim = (sim + 1) / 2.0
+# 
+# sim = data.frame(
+#     id = sim@Dimnames[[1]],
+#     x = sim@x) %>%
+#   arrange(desc(x)) %>% 
+#   top_n(nn)
+# 
+# knn_rows = which(train@data@Dimnames[[1]] %in% sim$id)
+# knn_mat = as.matrix(train@data[knn_rows,])
+# assert(dim(knn_mat)[1] == nn)
+# 
+# 
+# # nnx1 % t(N,1) -> nn x N i.e. 20 x 3706
+# s_coeff_mat = as.matrix(sim$x) %*% t(rep(1, N))
+# # scalar * nnxN * nnxN
+# r = (1 / sum(sim$x)) * s_coeff_mat * knn_mat
+# # nn x N -> vec len N
+# r = colSums(r)
+# assert(length(r) = N)
+# mypred = r
+
+# (c(2,1,4) %*% c(3,1,5)) / (norm(as.matrix(c(2,1,4)), type="F") * norm(as.matrix(c(3,1,5)), type="F"))
+```
+
+
+**Comparison to Recommenderlab**
+
+```{r}
+recommender.UBCF <- Recommender(train, method = "UBCF",
+                                parameter = list(normalize = 'center', 
+                                                 method = 'Cosine', 
+                                                 nn = 20))
+
+p.UBCF <- predict(recommender.UBCF, test, type="ratings")
+p.UBCF <- as.numeric(as(p.UBCF, "matrix"))
+
+sum(is.na(p.UBCF) != is.na(mypred)) ### should be zero
+max(abs(p.UBCF - mypred), na.rm = TRUE)  ### should be less than 1e-06 
+```
+
+
+
+```{r}
+# The prof also manually did the similarity matrix like so.
+# > sim = rep(0, dim(data)[1])
+# > for(i in 1:length(sim))
+# +{
+# + tmp.y = as.vector(newdata)
+# + ind.y = which(!is.na(tmp.y)) + tmp.x = data[i, ]
+# +   ind.x = which(!is.na(tmp.x))
+# +   ind  = intersect(ind.x, ind.y)
+# +   if (length(ind) > 0){
+# +
+# +
+# +
+# +}
+# +}
+# > sim = (1 + sim)/2
+# tmp.x = tmp.x[ind]
+# tmp.y = tmp.y[ind]
+# sim[i] = sum(tmp.x * tmp.y) / sqrt(sum(tmp.x^2) * sum(tmp.y^2))
+```
 
 
 
@@ -496,6 +652,39 @@ head(prev[!duplicated(prev$MovieID), ], n = 30)
 
 
 
+
+
+### IBCF Recommendation
+
+
+
+**My Implementation**
+
+```{r}
+# Check this post https://campuswire.com/c/G3D46BBBA/feed/1326
+# And this post https://campuswire.com/c/G3D46BBBA/feed/1334.
+
+```
+
+
+**Comparison to Recommenderlab**
+
+```{r}
+recommender.IBCF <- Recommender(train, method = "IBCF",
+                                parameter = list(normalize = 'center', 
+                                                 method = 'Cosine', 
+                                                 k = 30))
+
+p.IBCF <- predict(recommender.IBCF, test, type="ratings")
+p.IBCF <- as.numeric(as(p.IBCF, "matrix"))
+
+## first output: should be less than 10
+sum(is.na(p.IBCF) != is.na(mypred))  
+
+## second output: should be less than 10%
+mydiff = abs(p.IBCF - mypred)
+sum(mydiff[!is.na(mydiff)] > 1e-6) / sum(!is.na(mydiff)) 
+```
 
 
 
