@@ -1,0 +1,516 @@
+---
+title: "Project4_6723_botelho3"
+author: "botelho3"
+date: '2022-12-04'
+output:
+  html_document:
+    toc: yes
+    df_print: paged
+  html_notebook:
+    theme: readable
+    toc: yes
+    toc_float: yes
+---
+
+
+```{r warning=FALSE, include=FALSE}
+library(dplyr)
+library(lubridate)
+library(ggplot2)
+library(recommenderlab)
+library(DT)
+library(data.table)
+library(reshape2)
+```
+
+## Read Data
+
+
+**Ratings Data**
+```{r}
+# use colClasses = 'NULL' to skip columns
+ratings = read.csv('ratings.dat', 
+                   sep = ':',
+                   colClasses = c('integer', 'NULL'), 
+                   header = FALSE)
+colnames(ratings) = c('UserID', 'MovieID', 'Rating', 'Timestamp')
+head(ratings)
+```
+
+**Movies Data**
+```{r}
+movies = readLines('movies.dat')
+movies = strsplit(movies, split = "::", fixed = TRUE, useBytes = TRUE)
+movies = matrix(unlist(movies), ncol = 3, byrow = TRUE)
+movies = data.frame(movies, stringsAsFactors = FALSE)
+colnames(movies) = c('MovieID', 'Title', 'Genres')
+movies$MovieID = as.integer(movies$MovieID)
+
+# convert accented characters
+movies$Title[73]
+movies$Title = iconv(movies$Title, "latin1", "UTF-8")
+movies$Title[73]
+
+# extract year
+movies$Year = as.numeric(unlist(
+  lapply(movies$Title, function(x) substr(x, nchar(x)-4, nchar(x)-1))))
+```
+
+**User Data**
+```{r}
+users = read.csv('users.dat',
+                 sep = ':', header = FALSE)
+users = users[, -c(2,4,6,8)] # skip columns
+colnames(users) = c('UserID', 'Gender', 'Age', 'Occupation', 'Zip-code')
+```
+
+
+## Exploration
+```{r}
+dim(users)
+length(unique(ratings$UserID))
+```
+
+```{r}
+movies_not_rated = movies %>% 
+  filter(!(MovieID %in% ratings$MovieID))
+dim(movies_not_rated)
+```
+
+**Distribution of Ratings**
+
+```{r}
+tmp = data.frame(Rating = 1:5, 
+                 freq = as.vector(table(ratings$Rating)/nrow(ratings)))
+ggplot(data = tmp, aes(x = Rating, y = freq)) +
+  geom_bar(stat="identity", fill = 'steelblue', width = 0.6) + 
+  geom_text(aes(label=round(freq, dig=2)), 
+                vjust=1.6, color="white", size=3.5) +
+  theme_minimal()
+```
+
+
+**Ratings Per User**
+```{r}
+tmp = ratings %>% 
+  group_by(UserID) %>% 
+  summarize(ratings_per_user = n()) 
+  summary(tmp$ratings_per_user)
+  stem(tmp$ratings_per_user)
+  sum(tmp$ratings_per_user > 500)
+  sort(tmp$ratings_per_user[tmp$ratings_per_user>1300])
+
+tmp %>%
+  ggplot(aes(ratings_per_user)) +
+  geom_bar(fill = "steelblue") + coord_cartesian(c(20, 500))
+
+#tmp = tmp %>% full_join(users, by = 'UserID')
+```
+
+**Ratings Per Movie**
+
+```{r}
+tmp = ratings %>% 
+  group_by(MovieID) %>% 
+  summarize(ratings_per_movie = n(), ave_ratings = mean(Rating)) %>%
+  inner_join(movies, by = 'MovieID')
+summary(tmp$ratings_per_movie)
+```
+
+```{r}
+tmp %>% 
+  filter(ratings_per_movie > 2000) %>%
+  arrange(desc = ratings_per_movie) %>%
+  select(c("Title", "ratings_per_movie")) %>%
+  print(n = 31)
+
+tmp %>% ggplot(aes(ratings_per_movie)) + 
+  geom_bar(fill = "steelblue", width = 1) + coord_cartesian(c(1,1500))
+```
+
+```{r}
+small_image_url = "https://liangfgithub.github.io/MovieImages/"
+ratings %>% 
+  group_by(MovieID) %>% 
+  summarize(ratings_per_movie = n(), 
+            ave_ratings = round(mean(Rating), dig=3)) %>%
+  inner_join(movies, by = 'MovieID') %>%
+  filter(ratings_per_movie > 1000) %>%
+  top_n(10, ave_ratings) %>%
+  mutate(Image = paste0('<img src="', 
+                        small_image_url, 
+                        MovieID, 
+                        '.jpg?raw=true"></img>')) %>%
+  select('Image', 'Title', 'ave_ratings') %>%
+  arrange(desc(-ave_ratings)) %>%
+  datatable(class = "nowrap hover row-border", 
+            escape = FALSE, 
+            options = list(dom = 't',
+                          scrollX = TRUE, autoWidth = TRUE))
+```
+
+
+**Dist of Genres**
+
+```{r}
+genres = as.data.frame(movies$Genres, stringsAsFactors=FALSE)
+tmp = as.data.frame(tstrsplit(genres[,1], '[|]',
+                              type.convert=TRUE),
+                    stringsAsFactors=FALSE)
+genre_list = c("Action", "Adventure", "Animation", 
+               "Children's", "Comedy", "Crime",
+               "Documentary", "Drama", "Fantasy",
+               "Film-Noir", "Horror", "Musical", 
+               "Mystery", "Romance", "Sci-Fi", 
+               "Thriller", "War", "Western")
+m = length(genre_list)
+genre_matrix = matrix(0, nrow(movies), length(genre_list))
+for(i in 1:nrow(tmp)){
+  genre_matrix[i,genre_list %in% tmp[i,]]=1
+}
+colnames(genre_matrix) = genre_list
+remove("tmp", "genres")
+```
+
+```{r}
+data.frame(Genres = genre_list, 
+                 Freq = as.vector(colMeans(genre_matrix))) %>% 
+  ggplot(aes(reorder(Genres, Freq), Freq, fill = Freq)) + 
+  geom_bar(stat = "identity") + 
+    geom_text(aes(label = round(Freq, dig=2)), 
+            position = position_stack(vjust = 0.5), 
+            color="white", size=3) + 
+  coord_flip() + 
+  scale_colour_brewer(palette="Set1") + 
+  labs(y = 'Frequency', x = 'Genre')
+```
+
+
+```{r}
+tmp = ratings %>% 
+  left_join(data.frame(MovieID = movies$MovieID, genre_matrix), 
+            by = "MovieID") %>%
+  select(-c("UserID", "MovieID", "Rating", "Timestamp"))
+data.frame(Genres = genre_list, 
+           Popularity = as.vector(colMeans(tmp))) %>% 
+  ggplot(aes(reorder(Genres, Popularity), Popularity, fill = Popularity)) + 
+  geom_bar(stat = "identity") + 
+  geom_text(aes(label = round(Popularity, dig=3)), 
+            position = position_stack(vjust = 0.5), 
+            color="white", size=3) + 
+  coord_flip() + 
+  labs(y = 'Popularity', x = 'Genre')
+```
+
+```{r}
+tmp = rowSums(genre_matrix)
+summary(tmp)
+
+movies[which(tmp==6), ]
+movies[which(tmp==5), ]
+```
+
+
+```{r}
+# range(movies$Year) % 1919 to 2000
+tmp = data.frame(Year = movies$Year, genre_matrix) %>%
+  group_by(Year) %>%
+  summarise_all(sum)
+tmp[,-1] = apply(tmp[, -1], 2, cumsum)
+tmp[,-1] = tmp[,-1]/sum(tmp[nrow(tmp), -1])
+print(round(tmp[nrow(tmp),-1], dig=3))
+```
+
+```{r}
+tmp = reshape2::melt(tmp, id.vars="Year") 
+tmp %>%
+  ggplot(aes(Year, value, group = variable)) +
+  geom_area(aes(fill = variable)) + 
+  geom_line(aes(group = variable), position = "stack")
+```
+
+
+
+
+
+
+# System 1 - Recommendation Based on Genres
+
+
+## Data Precprocessing
+
+**Movies Data**
+```{r}
+movies = readLines('movies.dat')
+movies = strsplit(movies, split = "::", fixed = TRUE, useBytes = TRUE)
+movies = matrix(unlist(movies), ncol = 3, byrow = TRUE)
+movies = data.frame(movies, stringsAsFactors = FALSE)
+colnames(movies) = c('MovieID', 'Title', 'Genres')
+movies$MovieID = as.integer(movies$MovieID)
+
+# convert accented characters
+movies$Title[73]
+movies$Title = iconv(movies$Title, "latin1", "UTF-8")
+movies$Title[73]
+
+# extract year
+movies$Year = as.numeric(unlist(
+  lapply(movies$Title, function(x) substr(x, nchar(x)-4, nchar(x)-1))))
+```
+
+**User Data**
+```{r}
+users = read.csv('users.dat',
+                 sep = ':', header = FALSE)
+users = users[, -c(2,4,6,8)] # skip columns
+colnames(users) = c('UserID', 'Gender', 'Age', 'Occupation', 'Zip-code')
+```
+
+
+## Recommendation Algorithm 1
+
+Top five most highly rated movies in a genre.
+
+```{r}
+
+```
+
+
+## Recommendation Algorithm 2
+
+Most popular movies in the genre.
+
+- Highest number of average ratings. 
+- Discount factor for age. Older movies are likely to have more ratings? So
+discount them.
+
+```{r}
+# Add a ratings_per_movie and ave_ratings column
+tmp = ratings %>% 
+  group_by(MovieID) %>% 
+  summarize(ratings_per_movie = n(), ave_ratings = mean(Rating)) %>%
+  inner_join(movies, by = 'MovieID')
+dim(tmp)
+
+# Add a ratings_per_movie_year column
+tmp = ratings %>% 
+  inner_join(movies, by = 'MovieID') %>%
+  group_by(Year) %>% 
+  mutate(ratings_per_movie_year = n()) %>%
+  group_by(MovieID) %>%
+  summarize(ratings_per_movie = n(), ave_ratings = mean(Rating),
+            ratings_per_movie_year = first(ratings_per_movie_year), Year = first(Year),
+            Title = first(Title))
+dim(tmp)
+
+tmp %>%
+  filter(ratings_per_movie > 2000) %>%
+  arrange(desc(ratings_per_movie)) %>%
+  select(c("Title", "ratings_per_movie", "ratings_per_movie_year", "Year")) %>%
+  print(n = 31)
+
+# unique((tmp %>% group_by(ratings_per_movie))$ratings_per_movie)
+# unique((tmp %>% group_by(ratings_per_movie_year))$ratings_per_movie_year)
+
+# Plot histogram of ratings_per_movie
+tmp %>%
+  group_by(ratings_per_movie) %>%
+  mutate(count = n()) %>%
+  ggplot(., aes(x = ratings_per_movie, y = count)) + 
+  geom_bar(stat='identity', fill = "steelblue", width = 1) + coord_cartesian(c(20, 500))
+
+#  # Same as above just different plotting method.
+# tmp %>%
+#   group_by(ratings_per_movie) %>%
+#   ggplot(., aes(ratings_per_movie)) + 
+#   geom_bar(fill = "steelblue", width = 1) + coord_cartesian(c(20, 500))
+
+# Plot hisogram of movies per year
+tmp %>%
+  group_by(Year) %>%
+  ggplot(aes(Year)) + 
+    geom_bar(fill = "steelblue", width = 1) + coord_cartesian(c(1900,2020))
+
+
+# Plot histogram of reviews_per_movie_year
+tmp %>%
+  group_by(Year) %>%
+  summarize(ratings_per_movie_year = first(ratings_per_movie_year)) %>%
+  ggplot(aes(x = Year, y = ratings_per_movie_year)) + 
+    geom_bar(stat='identity', fill = "steelblue", width = 1) + coord_cartesian(c(1900,2020))
+```
+
+```{r}
+# Add a ratings_per_movie and ave_ratings column
+tmp = ratings %>% 
+  group_by(MovieID) %>% 
+  summarize(ratings_per_movie = n(), ave_ratings = mean(Rating)) %>%
+  inner_join(movies, by = 'MovieID')
+dim(tmp)
+
+# Add a ratings_per_year column
+tmp = ratings %>% 
+  inner_join(movies, by = 'MovieID') %>%
+  group_by(Year) %>% 
+  mutate(ratings_per_movie_year = n()) %>%
+  ungroup %>%
+  group_by(MovieID) %>%
+  summarize(ratings_per_movie = n(), ave_ratings = mean(Rating),
+            ratings_per_movie_year = first(ratings_per_movie_year), Year = first(Year),
+            Title = first(Title))
+
+# tmp = tmp %>%
+#   mutate(pct_ratings_per_year = (ratings_per_movie / ratings_per_movie_year)) %>%
+#   arrange(desc(pct_ratings_per_year))
+
+# Add a ratings_per_last_5_yr
+last_year = 2003
+ratings = ratings %>% 
+  mutate(RYear = year(as_datetime(Timestamp))) %>% 
+  # group_by(RYear) %>%
+  # mutate(ratings_per_year = n())
+head(ratings)
+head(tmp)
+```
+
+
+```{r}
+length(which(ratings$RYear == 2000))
+length(which(ratings$RYear == 2001))
+length(which(ratings$RYear == 2002))
+length(which(ratings$RYear == 2003))
+
+# prev = filter(RYear < last_year) %>%
+#   inner_join(tmp, by = 'MovieID', suffix=c("", ".y")) %>%
+#   select(-ends_with(".y")) %>%
+#   group_by(Year) %>% 
+#   mutate(mean_ratings_per_movie_year = n()) %>%
+  
+prev = ratings %>%
+  filter(RYear < 2001) %>%
+  inner_join(movies, by = 'MovieID') %>%
+  group_by(MovieID) %>%
+  mutate(ratings_per_movie = n(),
+         ave_ratings = mean(Rating)) %>%
+  ungroup %>%
+  group_by(Year) %>% 
+  mutate(ratings_per_movie_year = n()) %>%
+  ungroup()
+prev = prev %>%
+  mutate(pct_ratings_per_movie_year =  ratings_per_movie / ratings_per_movie_year)
+
+now = ratings %>%
+  filter(RYear >= 2001) %>%
+  inner_join(movies, by = 'MovieID') %>%
+  group_by(MovieID) %>%
+  mutate(ratings_per_movie = n(),
+         ave_ratings = mean(Rating)) %>%
+  ungroup %>%
+  group_by(Year) %>% 
+  mutate(ratings_per_movie_year = n()) %>%
+  ungroup()
+now = now %>%
+  mutate(pct_ratings_per_movie_year =  ratings_per_movie / ratings_per_movie_year)
+ 
+
+now = now %>% 
+  group_by(MovieID) %>%
+  summarize(
+    MovieID = first(MovieID),
+    # Title = first(Title),
+    # Year = first(Year),
+    # RYear = first(RYear),
+    Rating = mean(Rating),
+    ratings_per_movie = first(ratings_per_movie),
+    ratings_per_movie_year = first(ratings_per_movie_year),
+    pct_ratings_per_movie_year = first(pct_ratings_per_movie_year),
+    ave_ratings = first(ave_ratings),
+  )
+  
+prev = prev %>% 
+  group_by(MovieID) %>%
+  summarize(
+    MovieID = first(MovieID),
+    Title = first(Title),
+    Rating = mean(Rating),
+    Year = first(Year),
+    RYear = first(RYear),
+    ratings_per_movie = first(ratings_per_movie),
+    ratings_per_movie_year = first(ratings_per_movie_year),
+    pct_ratings_per_movie_year = first(pct_ratings_per_movie_year),
+    ave_ratings = first(ave_ratings),
+  )
+  
+a =  prev %>%
+  full_join(now, by = 'MovieID')
+
+a = a %>%
+  mutate(ratio = pct_ratings_per_movie_year.y / pct_ratings_per_movie_year.x) %>%
+  mutate(diff = pct_ratings_per_movie_year.y - pct_ratings_per_movie_year.x) %>%
+  mutate(ratio2 = ratings_per_movie.y / ratings_per_movie.x) %>%
+  mutate(diff2 = ratings_per_movie.y - ratings_per_movie.x) %>%
+  mutate(metric1 = scale(ratings_per_movie.y) - scale(ratings_per_movie.x))
+
+to_order = a %>%
+  select(MovieID, Title, ratio, diff, ratio2, diff2, metric1, Year, Rating.x) %>%
+  filter(Rating.x > 4.0) %>%
+  arrange(desc(metric1))
+print(to_order, n=30)
+  
+# inner_join(tmp, by = 'MovieID', suffix=c("", ".y")) %>%
+# select(-ends_with(".y")) %>%
+  
+# tmp = ratings %>%
+# left_join(data.frame(MovieID = movies$MovieID, genre_matrix),
+#           by = "MovieID") %>%
+# select(-c("UserID", "MovieID", "Rating", "Timestamp"))
+  
+
+head(tmp, n = 30)
+head(prev[!duplicated(prev$MovieID), ], n = 30)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# System 2 - Collaborative Recommendation System
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
