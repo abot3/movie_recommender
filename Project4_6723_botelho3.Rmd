@@ -543,14 +543,17 @@ sim1 = (1 + sim1)/2
 class(sim1)
 
 sim1_mat <- `dim<-`(c(sim1), dim(sim1))
-sim_df = data.frame(
-    id = rownames(sim1),
-    x = sim1_mat) %>%
-  arrange(desc(x)) %>%
-  head(nn)
+# sim_df = data.frame(
+#     id = rownames(sim1),
+#     x = sim1_mat) %>%
+#   arrange(desc(x)) %>%
+#   head(nn)
   # top_n(nn)
 #tail(order(sim1[,1], decreasing = FALSE), 30)
 knn_rows = head(order(sim1[,1], decreasing = TRUE), nn)
+sim_df = data.frame(
+    id = rownames(sim1)[knn_rows],
+    x = sim1_mat[knn_rows, 1])
 
 # 20x3706 i.e. nn x N
 knn_mat = data[knn_rows,]
@@ -558,18 +561,26 @@ assert(dim(knn_mat)[1] == nn)
 
 # nnx1 % t(N,1) -> nn x N i.e. 20 x 3706
 # Note similarity matrix might have NA in it.
-s_coeff_mat = as.matrix(sim$x) %*% t(rep(1, N))
+s_coeff_mat = as.matrix(sim_df$x) %*% t(rep(1, N))
 # scalar * nnxN * nnxN
-r = (1 / sum(sim$x)) * s_coeff_mat * knn_mat
+
+# Zero out the coefficient wherever the k nearest neighbors are NA.
+denom_mat = s_coeff_mat * as.integer(!is.na(knn_mat))
+
+# THE PROBLEM IS THIS DENOMINATOR. IT'S ALWAYS SUMMING ALL COEFFICIENTS
+# WHEN WE SHOULD ONLY INCLUDE COEFFICIENTS WHEN rij != NA.
+# r = (1 / sum(sim_df$x, na.rm=TRUE)) * s_coeff_mat * knn_mat
+ r = denom_mat * knn_mat
 # nn x N -> vec len N
-r = colMeans(r, na.rm = TRUE)
+# r = colMeans(r, na.rm = TRUE)
+r = colSums(r, na.rm = TRUE) / colSums(denom_mat, na.rm = FALSE)
 assert(length(r) == N)
 mypred = r
 
 # Clean up mypred
 test_user_watched = !is.na(newdata)
 assert(length(test_user_watched) == N)
-mypred = mypred + user.means
+mypred = mypred + newuser.means
 mypred[which(is.infinite(mypred))] = NA
 mypred[which(test_user_watched)] = NA
 
