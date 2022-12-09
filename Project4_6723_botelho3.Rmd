@@ -677,6 +677,71 @@ max(abs(p.UBCF - mypred), na.rm = TRUE)  ### should be less than 1e-06
 
 ```
 
+```{r}
+# center
+k = 30
+M = 500
+N = N
+
+newdata = as(test, "matrix")
+#newdata = t(newdata)
+newuser.means = mean(newdata, na.rm = TRUE)
+newdata = newdata - newuser.means
+# assert(dim(newdata) == c(N,1))
+
+data = as(train, "matrix")
+user.means = rowMeans(data, na.rm = TRUE)
+data = data - user.means
+assert(dim(data) == c(M, N))
+
+active_items_mask = !is.na(newdata)
+active_items_idx = which(active_items_mask)
+
+sim1 = proxy::simil(t(data), t(data), method = "cosine")
+assert(dim(sim1) == c(N,N))
+sim1 = (1 + sim1)/2
+class(sim1)
+
+sim1_mat <- `dim<-`(c(sim1), dim(sim1))
+# Remove the diag because they're all ones, which would mess up the ordering
+diag(sim1_mat) = 0.0 
+s_mat = matrix(0, nrow = nrow(sim1_mat), ncol = ncol(sim1_mat))
+#all_col_indices = 1:ncol(sim1_mat)
+for (row in 1:nrow(sim1_mat)) {
+  col_indices = head(order(sim1_mat[row,], decreasing = TRUE), k)
+  #inv_col_indices = setdiff(all_col_indices, col_indices)
+  s_mat[row, col_indices] = sim1_mat[row, col_indices]
+}
+assert(dim(s_mat) == c(N,N))
+
+# Keep only k nearest neighbor rows.
+
+# # Zero out the coefficient wherever the k nearest neighbors are NA.
+# denom_mat = s_mat * as.integer(!is.na(s_mat))
+
+# THE PROBLEM IS THIS DENOMINATOR. IT'S ALWAYS SUMMING ALL COEFFICIENTS
+# WHEN WE SHOULD ONLY INCLUDE COEFFICIENTS WHEN rij != NA.
+# r = (1 / sum(sim_df$x, na.rm=TRUE)) * s_coeff_mat * knn_mat 
+
+# This is going to bring NAs into the matrix
+newdata_prime = newdata
+newdata_prime[is.na(newdata)] = 0
+# r = t(t(s_mat) * newdata_prime)
+r = t(s_mat) %*% newdata_prime
+r = r / rowSums(s_mat[,active_items_idx], na.rm = TRUE)
+
+# nn x N -> vec len N
+# r = colMeans(r, na.rm = TRUE)
+# r = colSums(r, na.rm = TRUE) / colSums(denom_mat, na.rm = FALSE)
+assert(length(r) == N)
+mypred = r
+
+# Clean up mypred
+mypred = mypred + newuser.means
+mypred[which(is.infinite(mypred))] = NA
+mypred[active_items_idx] = NA
+```
+
 
 **Comparison to Recommenderlab**
 
@@ -698,6 +763,8 @@ sum(mydiff[!is.na(mydiff)] > 1e-6) / sum(!is.na(mydiff))
 ```
 
 
+**Question: why do we encounter such a big discrepancy for IBCF, but not for
+UBCF?**
 
 
 
