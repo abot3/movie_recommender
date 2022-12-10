@@ -366,7 +366,7 @@ tmp = ratings %>%
 # Add a ratings_per_last_5_yr
 last_year = 2003
 ratings = ratings %>% 
-  mutate(RYear = year(as_datetime(Timestamp))) %>% 
+  mutate(RYear = year(as_datetime(Timestamp)))
   # group_by(RYear) %>%
   # mutate(ratings_per_year = n())
 head(ratings)
@@ -523,6 +523,7 @@ test = Rmat[501, ]
 
 ```{r}
 # center
+set.seed(6723)
 nn = 20
 M = 500
 N = N
@@ -678,6 +679,7 @@ max(abs(p.UBCF - mypred), na.rm = TRUE)  ### should be less than 1e-06
 ```
 
 ```{r}
+set.seed(6723)
 # center
 k = 30
 M = 500
