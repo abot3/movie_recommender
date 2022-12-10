@@ -16,7 +16,7 @@ ui = dashboardPage(
           skin = "blue",
           dashboardHeader(title = "Movie Recommender"),
 
-          dashboardSidebar(disable = TRUE),
+          dashboardSidebar(disable = FALSE),
 
           dashboardBody(includeCSS("css/books.css"),
               fluidRow(
