@@ -24,7 +24,13 @@ source('functions/similarity_measures.R') # similarity measures
 movie_url_to_tag = function(url) {
   # paste0(
   #   "<img src=\"",
-  return(base64enc::dataURI(file=url, mime="image/jpeg"))
+  USE_REMOTE_IMAGES = FALSE
+  if (USE_REMOTE_IMAGES) {
+    small_image_url = "https://liangfgithub.github.io/"
+    return (paste0(small_image_url, x, '?raw=true'))
+  } else {
+    return (base64enc::dataURI(file=url, mime="image/jpeg"))
+  }
     # "\"></img>")
 }
 
@@ -66,6 +72,26 @@ movies$Year = as.numeric(unlist(
 movies$image_url = sapply(movies$MovieID,
                           function(x) paste0("MovieImages/", x, ".jpg"))
 
+
+
+# Build the genre matrix
+genres = as.data.frame(movies$Genres, stringsAsFactors=FALSE)
+tmp = as.data.frame(tstrsplit(genres[,1], '[|]',
+                              type.convert=TRUE),
+                    stringsAsFactors=FALSE)
+genre_list = c("Action", "Adventure", "Animation",
+               "Children's", "Comedy", "Crime",
+               "Documentary", "Drama", "Fantasy",
+               "Film-Noir", "Horror", "Musical",
+               "Mystery", "Romance", "Sci-Fi",
+               "Thriller", "War", "Western")
+m = length(genre_list)
+genre_matrix = matrix(0, nrow(movies), length(genre_list))
+for(i in 1:nrow(tmp)){
+  genre_matrix[i,genre_list %in% tmp[i,]]=1
+}
+colnames(genre_matrix) = genre_list
+
 # # reshape to movies x user matrix
 # ratingmat <- sparseMatrix(ratings$book_id, ratings$user_id, x=ratings$rating) # book x user matrix
 # ratingmat <- ratingmat[, unique(summary(ratingmat)$j)] # remove users with no ratings
@@ -75,10 +101,44 @@ movies$image_url = sapply(movies$MovieID,
 # server = function(input, output, session) {
 shinyServer(function(input, output, session) {
 
+  # Show the system 1 movie genres to be selected.
+  # Output: thumbnails + genre checkbox.
+  output$genres <- renderUI({
+    # num_rows <- 20
+    num_movies <- 6 # movies per row
+    num_rows <- ceiling(length(genre_list) / num_movies)
+
+    # checkboxInput
+
+    lapply(1:num_rows, function(i) {
+      list(fluidRow(lapply(1:num_movies, function(j) {
+        list(box(width = 2,
+                 div(style = "text-align:center", img(src = movies$image_url[(i - 1) * num_movies + j], style = "max-height:150")),
+                 # div(style = "text-align:center; color: #999999; font-size: 80%", movies$authors[(i - 1) * num_movies + j]),
+                 div(style = "text-align:center", strong(movies$Title[(i - 1) * num_movies + j])),
+                 #div(style = "text-align:center; font-size: 150%; color: #f0ad4e;", ratingInput(paste0("select_", movies$MovieID[(i - 1) * num_movies + j]), label = "", dataStop = 5))
+                 )) #00c0ef
+      })))
+    })
+  })
+
+  # Show the system 1 genre-based recommendations.
+  # Output: thumbnails + top 5 of selected genres.
+  output$genre_results <- renderUI({
+    box(width = 12,
+        div(style = "text-align:center", "Placeholder for genre recommendations", style = "max-height:150"),
+      )
+  })
+
+
+  # Calculate top genre recommendations when the submit button is clicked
+  # df <- eventReactive(input$btn, {
+  # })
+
   # show the movies to be rated
   output$ratings <- renderUI({
     # num_rows <- 20
-    num_rows <- 2
+    num_rows <- 10
     num_movies <- 6 # movies per row
 
     lapply(1:num_rows, function(i) {
@@ -147,7 +207,7 @@ shinyServer(function(input, output, session) {
         box(width = 2, status = "success", solidHeader = TRUE, title = paste0("Rank ", (i - 1) * num_movies + j),
 
           div(style = "text-align:center",
-              a(img(src =  movie_url_to_tag(movies$image_url[recom_result$MovieID[(i - 1) * num_movies + j]]), height = 150))
+              a(img(src = movie_url_to_tag(movies$image_url[recom_result$MovieID[(i - 1) * num_movies + j]]), height = 150))
           ),
           div(style="text-align:center; font-size: 100%",
               strong(movies$Title[recom_result$MovieID[(i - 1) * num_movies + j]])
