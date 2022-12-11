@@ -250,15 +250,21 @@ shinyServer(function(input, output, session) {
     # num_rows <- 20
     num_rows <- 10
     num_movies <- 6 # movies per row
+    num_total <- num_rows * num_movies
+
+    sampled_movies = movies
+    if (RANDOM_RATING_EN) {
+      sampled_movies = movies[sample(nrow(movies),size=num_total,replace=FALSE), ]
+    }
 
     lapply(1:num_rows, function(i) {
       list(fluidRow(lapply(1:num_movies, function(j) {
         list(box(width = 2,
-                 div(style = "text-align:center", img(src = movie_url_to_tag(movies$image_url[(i - 1) * num_movies + j]),
+                 div(style = "text-align:center", img(src = movie_url_to_tag(sampled_movies$image_url[(i - 1) * num_movies + j]),
                                                       style = "max-height:90%; height:90%; width:100%")),
-                 div(style = "text-align:center", strong(movies$Title[(i - 1) * num_movies + j])),
+                 div(style = "text-align:center", strong(sampled_movies$Title[(i - 1) * num_movies + j])),
                  div(style = "text-align:center; font-size: 150%; color: #f0ad4e;",
-                     ratingInput(paste0("select_", movies$MovieID[(i - 1) * num_movies + j]), label = "", dataStop = 5))
+                     ratingInput(paste0("select_", sampled_movies$MovieID[(i - 1) * num_movies + j]), label = "", dataStop = 5))
                  )) #00c0ef
       })))
     })
@@ -283,7 +289,8 @@ shinyServer(function(input, output, session) {
 
         results = system_2_recommend(Rmat, user_ratings, rec_UBCF)
 
-        user_results = as.vector(results@ratings$`0`)
+        user_results = unlist(lapply(as.vector(results@ratings$`0`),
+                                     function(x){ max(min(5,x),0) }))
         user_predicted_ids = as.vector(results@items$`0`)
         midxs = which(movies$MovieID %in% user_predicted_ids)
         print("Midxs")
@@ -291,7 +298,7 @@ shinyServer(function(input, output, session) {
         recom_results <- data.table(Rank = 1:SYSTEM_TWO_TOP_N,
                                     MovieID = movies$MovieID[midxs],
                                     Title = movies$Title[midxs],
-                                    Predicted_rating =  user_results,
+                                    Predicted_rating = user_results,
                                     Row = midxs)
 
         # # add user's ratings as first column to rating matrix
@@ -341,7 +348,7 @@ shinyServer(function(input, output, session) {
           ),
           div(style="text-align:center; font-size: 100%",
               # strong(movies$Genres[recom_result$MovieID[(i - 1) * num_movies + j]])
-              strong(max(min(0, recom_result$Rating[(i - 1) * num_movies + j])), 5)
+              strong(recom_result$Predicted_rating[(i - 1) * num_movies + j])
           )
         )
       #   box(width = 2, status = "success", solidHeader = TRUE, title = paste0("Rank ", (i - 1) * num_movies + j),

@@ -12,6 +12,7 @@ library(testit)
 
 SYSTEM_ONE_TOP_N = 6
 SYSTEM_TWO_TOP_N = 20
+RANDOM_RATING_EN = FALSE
 
 # Recommend the Top 6 movies in the checkbox genres. Moves are ranked in
 # descending order by average rating. All moves must have been rated >= the mean
