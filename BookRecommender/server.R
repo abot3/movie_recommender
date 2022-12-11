@@ -256,7 +256,6 @@ shinyServer(function(input, output, session) {
         list(box(width = 2,
                  div(style = "text-align:center", img(src = movie_url_to_tag(movies$image_url[(i - 1) * num_movies + j]),
                                                       style = "max-height:90%; height:90%; width:100%")),
-                 # div(style = "text-align:center; color: #999999; font-size: 80%", movies$authors[(i - 1) * num_movies + j]),
                  div(style = "text-align:center", strong(movies$Title[(i - 1) * num_movies + j])),
                  div(style = "text-align:center; font-size: 150%; color: #f0ad4e;",
                      ratingInput(paste0("select_", movies$MovieID[(i - 1) * num_movies + j]), label = "", dataStop = 5))
@@ -279,13 +278,21 @@ shinyServer(function(input, output, session) {
         # get the user's rating data
         value_list <- reactiveValuesToList(input)
         user_ratings <- get_user_ratings(value_list)
+        print("User Ratings")
+        print(user_ratings)
 
-        user_results = (1:10)/10
-        user_predicted_ids = 1:10
-        recom_results <- data.table(Rank = 1:10,
-                                    MovieID = movies$MovieID[user_predicted_ids],
-                                    Title = movies$Title[user_predicted_ids],
-                                    Predicted_rating =  user_results)
+        results = system_2_recommend(Rmat, user_ratings, rec_UBCF)
+
+        user_results = as.vector(results@ratings$`0`)
+        user_predicted_ids = as.vector(results@items$`0`)
+        midxs = which(movies$MovieID %in% user_predicted_ids)
+        print("Midxs")
+        print(midxs)
+        recom_results <- data.table(Rank = 1:SYSTEM_TWO_TOP_N,
+                                    MovieID = movies$MovieID[midxs],
+                                    Title = movies$Title[midxs],
+                                    Predicted_rating =  user_results,
+                                    Row = midxs)
 
         # # add user's ratings as first column to rating matrix
         # rmat <- cbind(user_ratings, ratingmat)
@@ -315,35 +322,40 @@ shinyServer(function(input, output, session) {
   output$results <- renderUI({
     num_rows <- 4
     num_movies <- 5
+    assert(num_rows * num_movies == SYSTEM_TWO_TOP_N)
     recom_result <- df2()
+    print("recom_result")
+    print(recom_result)
 
     lapply(1:num_rows, function(i) {
       list(fluidRow(lapply(1:num_movies, function(j) {
-        box(width = 2, status = "success", solidHeader = TRUE, title = paste0("Rank ", (i - 1) * num_movies + j),
-
+        m_id = recom_result$MovieID[(i - 1) * num_movies + j]
+        row = recom_result$Row[(i - 1) * num_movies + j]
+        box(width = 2, status = "success", solidHeader = TRUE,
+            title = paste0("Rank ", recom_result$Rank[(i - 1) * num_movies + j]),
           div(style = "text-align:center",
-              a(img(src = movie_url_to_tag(movies$image_url[recom_result$MovieID[(i - 1) * num_movies + j]]), height = 150))
+              a(img(src = movie_url_to_tag(movies$image_url[row]), height = 150))
           ),
           div(style="text-align:center; font-size: 100%",
-              strong(movies$Title[recom_result$MovieID[(i - 1) * num_movies + j]])
+              strong(movies$Title[row])
+          ),
+          div(style="text-align:center; font-size: 100%",
+              # strong(movies$Genres[recom_result$MovieID[(i - 1) * num_movies + j]])
+              strong(max(min(0, recom_result$Rating[(i - 1) * num_movies + j])), 5)
           )
-
-          # div(style = "text-align:center",
-          #     a(href = paste0('https://www.goodreads.com/book/show/', movies$best_book_id[recom_result$Book_id[(i - 1) * num_movies + j]]),
-          #       target='blank',
-          #       img(src = movies$image_url[recom_result$Book_id[(i - 1) * num_movies + j]], height = 150))
-          #    ),
-          # div(style = "text-align:center; color: #999999; font-size: 80%",
-          #     movies$authors[recom_result$Book_id[(i - 1) * num_movies + j]]
-          #    ),
-          # div(style="text-align:center; font-size: 100%",
-          #     strong(movies$title[recom_result$Book_id[(i - 1) * num_movies + j]])
-          #    )
-
         )
+      #   box(width = 2, status = "success", solidHeader = TRUE, title = paste0("Rank ", (i - 1) * num_movies + j),
+      #
+      #     div(style = "text-align:center",
+      #         a(img(src = movie_url_to_tag(movies$image_url[recom_result$MovieID[(i - 1) * num_movies + j]]), height = 150))
+      #     ),
+      #     div(style="text-align:center; font-size: 100%",
+      #         strong(movies$Title[recom_result$MovieID[(i - 1) * num_movies + j]])
+      #     )
+      #   )
+      # }))) # columns
       }))) # columns
     }) # rows
-
   }) # renderUI function
 
 # }  # server function

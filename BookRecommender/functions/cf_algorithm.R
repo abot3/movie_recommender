@@ -11,6 +11,7 @@ library(data.table)
 library(testit)
 
 SYSTEM_ONE_TOP_N = 6
+SYSTEM_TWO_TOP_N = 20
 
 # Recommend the Top 6 movies in the checkbox genres. Moves are ranked in
 # descending order by average rating. All moves must have been rated >= the mean
@@ -60,25 +61,31 @@ system_1_recommend <- function(ratings, movies,
 
 # Recommend the Top 10 movies according the new user's ratings. Movies are
 # ranked using UBCF.
-system_2_recommend <- function(ratings) {
+system_2_recommend <- function(Rmat, ratings, rec_UBCF) {
+  mids = paste0('m', ratings$MovieID)
+  print("mids")
+  print(mids)
+  r = ratings$Rating
+
   movieIDs = colnames(Rmat)
   n.item = ncol(Rmat)
   new.ratings = rep(NA, n.item)
-  new.ratings[which(movieIDs == "m1193")] = 5
-  new.ratings[which(movieIDs == "m661")] = 3
-  new.ratings[which(movieIDs == "m76")] = 1
-  new.ratings[which(movieIDs == "m2106")] = 2
-  new.ratings[which(movieIDs == "m2804")] = 2
-  new.ratings[which(movieIDs == "m919")] = 4
+  new.ratings[which(movieIDs %in% mids)] = ratings$Rating
+  # new.ratings[which(movieIDs == "m1193")] = 5
+  # new.ratings[which(movieIDs == "m661")] = 3
+  # new.ratings[which(movieIDs == "m76")] = 1
+  # new.ratings[which(movieIDs == "m2106")] = 2
+  # new.ratings[which(movieIDs == "m2804")] = 2
+  # new.ratings[which(movieIDs == "m919")] = 4
   new.user = matrix(new.ratings,
                     nrow=1, ncol=n.item,
                     dimnames = list(
-                      user=paste('feng'),
+                      user=paste('Jimminy Cricket'),
                       item=movieIDs
                     ))
   new.Rmat = as(new.user, 'realRatingMatrix')
 
-  recom1 = predict(rec_UBCF, new.Rmat, type = 'topN')
+  recom1 = predict(rec_UBCF, new.Rmat, n=SYSTEM_TWO_TOP_N, type='topN')
   recom1@items
   recom1@ratings
 
