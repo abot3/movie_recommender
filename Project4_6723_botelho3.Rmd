@@ -825,10 +825,26 @@ sum(mydiff[!is.na(mydiff)] > 1e-6) / sum(!is.na(mydiff))
 **Question: why do we encounter such a big discrepancy for IBCF, but not for
 UBCF?**
 
+IBCF results depend on the ordering of the sorted nearest neighbors when there
+is a tie between two ratings. The different ordering of nearest neighbors
+keeps a different column in the items matrix and later when summing over the rows
+to form the prediction for a new user we get a slightly different result.
 
 
 
 
+
+
+```{r eval=FALSE, echo=FALSE}
+blah = predict(recommender.UBCF, test, type="topN")
+# blah@itemLabels
+items = as.vector(blah@items$`0`)
+items
+ratings = as.vector(blah@ratings$`0`)
+ratings
+mids = movies$MovieID %in% items
+movies[mids, ]
+```
 
 
 
