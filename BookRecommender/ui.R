@@ -28,6 +28,7 @@ ui = dashboardPage(
             tabItems(
               tabItem(tabName = "home",
                   h2("Home tab content"),
+                  # TODO(aaronbotelho) - remove this action button when done dbg.
                   actionButton("browser", "Trigger browser()"),
                   div(
                     p("Select on of the recommendation systems in the navbar to get started.") ,
@@ -59,7 +60,7 @@ ui = dashboardPage(
                         title = "Discover movies you might like",
                         br(),
                         withBusyIndicatorUI(
-                          actionButton("btn", "Click here to get your recommendations", class = "btn-warning")
+                          actionButton("genre_btn", "Click here to get your recommendations", class = "btn-warning")
                         ),
                         br(),
                         tableOutput("genre_results")

@@ -272,7 +272,55 @@ colnames(users) = c('UserID', 'Gender', 'Age', 'Occupation', 'Zip-code')
 Top five most highly rated movies in a genre.
 
 ```{r}
+checkbox_genres = c(genre_list[1], genre_list[8], genre_list[length(genre_list)])
+print(checkbox_genres)
+system_1_recommend <- function(ratings, movies,
+                     genre_list, genre_matrix,
+                     checkbox_genres) {
+  num_genres = length(checkbox_genres)
+  TOP_N = 6
+  joined = ratings %>% 
+    group_by(MovieID) %>% 
+    summarize(ratings_per_movie = n(), ave_ratings = mean(Rating))
+  joined = movies %>%
+    left_join(joined, by = 'MovieID', all.x = TRUE)# %>%
+    #arrange(MovieID)
+ 
+  # Transpose the relevant genres. 
+  row_idx = which(genre_list %in% checkbox_genres) 
+  genre_names = genre_list[row_idx]
+  tgm = t(genre_matrix)
+  tgm = tgm[row_idx, ]
 
+  result_cols =  c("MovieID", "ave_ratings", "Genres", "Genre") 
+  results_list = vector("list", num_genres) 
+  names(results_list) = checkbox_genres
+  results = data.frame(matrix(nrow = num_genres, ncol = 4))
+  colnames(results) <- result_cols
+  for (i in 1:length(row_idx)) {
+    movies_row_idx = which(tgm[i, ] == 1)
+    tmp = joined %>%
+            slice(movies_row_idx) %>%
+            mutate(mean_ratings_per_movie = mean(ratings_per_movie, na.rm = TRUE)) %>%
+            filter(ratings_per_movie > mean_ratings_per_movie) %>%
+            arrange(desc(ave_ratings)) 
+    s = (i-1) * TOP_N + 1
+    e = s + TOP_N - 1
+    c = result_cols[!(result_cols %in% c("Genre"))]
+    results[s:e, c] = tmp[1:TOP_N, c]
+    results[s:e, ]$Genre = genre_names[i]
+    results_list[[i]] = tmp$MovieID[1:TOP_N]
+  }
+  return(results)
+}
+# system_1_results = results
+system_1_results = system_1_recommend(ratings, movies,
+                                      genre_list, genre_matrix, checkbox_genres)
+
+# Display results
+for (g in checkbox_genres) {
+  print(system_1_results[system_1_results$Genre == g, ])
+}
 ```
 
 

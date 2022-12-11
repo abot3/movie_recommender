@@ -8,6 +8,7 @@ library(Matrix)
 library(recommenderlab)
 library(slam)
 library(data.table)
+library(testit)
 
 SYSTEM_ONE_TOP_N = 6
 
@@ -17,13 +18,17 @@ SYSTEM_ONE_TOP_N = 6
 system_1_recommend <- function(ratings, movies,
                                genre_list, genre_matrix,
                                checkbox_genres) {
+  assert(is.unsorted(movies$MovieID) == FALSE)
   num_genres = length(checkbox_genres)
+  TOP_N = 6
   joined = ratings %>%
     group_by(MovieID) %>%
-    summarize(ratings_per_movie = n(), ave_ratings = mean(Rating)) %>%
-    inner_join(movies, by = 'MovieID')
+    summarize(ratings_per_movie = n(), ave_ratings = mean(Rating))
+  joined = movies %>%
+    left_join(joined, by = 'MovieID', all.x = TRUE)# %>%
+    #arrange(MovieID)
 
-  # Transpose the relvant genres.
+  # Transpose the relevant genres.
   row_idx = which(genre_list %in% checkbox_genres)
   genre_names = genre_list[row_idx]
   tgm = t(genre_matrix)
@@ -38,7 +43,7 @@ system_1_recommend <- function(ratings, movies,
     movies_row_idx = which(tgm[i, ] == 1)
     tmp = joined %>%
       slice(movies_row_idx) %>%
-      mutate(mean_ratings_per_movie = mean(ratings_per_movie)) %>%
+      mutate(mean_ratings_per_movie = mean(ratings_per_movie, na.rm = TRUE)) %>%
       filter(ratings_per_movie > mean_ratings_per_movie) %>%
       arrange(desc(ave_ratings))
     s = (i-1) * TOP_N + 1
@@ -53,8 +58,35 @@ system_1_recommend <- function(ratings, movies,
 
 
 
+# Recommend the Top 10 movies according the new user's ratings. Movies are
+# ranked using UBCF.
+system_2_recommend <- function(ratings) {
+  movieIDs = colnames(Rmat)
+  n.item = ncol(Rmat)
+  new.ratings = rep(NA, n.item)
+  new.ratings[which(movieIDs == "m1193")] = 5
+  new.ratings[which(movieIDs == "m661")] = 3
+  new.ratings[which(movieIDs == "m76")] = 1
+  new.ratings[which(movieIDs == "m2106")] = 2
+  new.ratings[which(movieIDs == "m2804")] = 2
+  new.ratings[which(movieIDs == "m919")] = 4
+  new.user = matrix(new.ratings,
+                    nrow=1, ncol=n.item,
+                    dimnames = list(
+                      user=paste('feng'),
+                      item=movieIDs
+                    ))
+  new.Rmat = as(new.user, 'realRatingMatrix')
 
+  recom1 = predict(rec_UBCF, new.Rmat, type = 'topN')
+  recom1@items
+  recom1@ratings
 
+  # recom2 = predict(rec_UBCF, new.Rmat, type = 'ratings')
+  # order(as(recom2, "matrix"), decreasing = TRUE)[1:10]
+  # as(recom1, "matrix")[order(as(recom1, "matrix"), decreasing = TRUE)[1:10]]
+  return(recom1)
+}
 
 
 

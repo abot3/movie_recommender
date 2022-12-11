@@ -4,22 +4,7 @@
 source('functions/cf_algorithm.R') # collaborative filtering
 source('functions/similarity_measures.R') # similarity measures
 
-# define functions
-# get_user_ratings <- function(value_list) {
-#   dat <- data.table(book_id = sapply(strsplit(names(value_list), "_"), function(x) ifelse(length(x) > 1, x[[2]], NA)),
-#                     rating = unlist(as.character(value_list)))
-#   dat <- dat[!is.null(rating) & !is.na(book_id)]
-#   dat[rating == " ", rating := 0]
-#   dat[, ':=' (book_id = as.numeric(book_id), rating = as.numeric(rating))]
-#   dat <- dat[rating > 0]
-#
-#   # get the indices of the ratings
-#   # add the user ratings to the existing rating matrix
-#   user_ratings <- sparseMatrix(i = dat$book_id,
-#                                j = rep(1,nrow(dat)),
-#                                x = dat$rating,
-#                                dims = c(nrow(ratingmat), 1))
-# }
+# Define utility functions.
 
 movie_url_to_tag = function(url) {
   # paste0(
@@ -29,7 +14,8 @@ movie_url_to_tag = function(url) {
     small_image_url = "https://liangfgithub.github.io/"
     return (paste0(small_image_url, x, '?raw=true'))
   } else {
-    return (base64enc::dataURI(file=url, mime="image/jpeg"))
+    #return (base64enc::dataURI(file=url, mime="image/jpeg"))
+    return (url)
   }
     # "\"></img>")
 }
@@ -45,15 +31,37 @@ get_user_ratings = function(value_list) {
 }
 
 
-# read in data
-# ratings <- fread('data/ratings.csv')
+# Read in ratings data.
 ratings = read.csv('data/ratings.dat',
                    sep = ':',
                    colClasses = c('integer', 'NULL'),
                    header = FALSE)
 colnames(ratings) = c('UserID', 'MovieID', 'Rating', 'Timestamp')
+i = paste0('u', ratings$UserID)
+j = paste0('m', ratings$MovieID)
+x = ratings$Rating
+tmp = data.frame(i, j, x, stringsAsFactors = T)
+Rmat = sparseMatrix(as.integer(tmp$i), as.integer(tmp$j), x = tmp$x)
+rownames(Rmat) = levels(tmp$i)
+colnames(Rmat) = levels(tmp$j)
+Rmat = new('realRatingMatrix', data = Rmat)
+Rmat = Rmat[1:500, ] # let's use a subset
 
-# read in data
+rec_UBCF = NULL
+if (all(file.exists("rec.rds"))) {
+  rec_UBCF <- readRDS("rec.rds")
+  rec_UBCF
+} else {
+  rec_UBCF = Recommender(Rmat, method = 'UBCF',
+                         parameter = list(normalize = 'Z-score',
+                                          method = 'Cosine',
+                                          nn = 25))
+  saveRDS(rec_UBCF, file = "rec.rds")
+  # unlink("rec.rds")
+}
+
+
+# Read in movies data.
 # myurl = "https://liangfgithub.github.io/MovieData/"
 movies = readLines('data/movies.dat')
 movies = strsplit(movies, split = "::", fixed = TRUE, useBytes = TRUE)
@@ -123,19 +131,22 @@ shinyServer(function(input, output, session) {
       movies_in_genre[s:e, ] = movies[which(t(genre_matrix)[i,]==1)[1:num_movies], ]
     }
 
+    # Create the list of divs with each genre heading and 6 images for each genre.
     tmp = lapply(1:num_genres, function(i) {
       list(
         fluidRow(h3(style = "text-align:center", genre_list[i])),
         fluidRow(lapply(1:num_movies, function(j) {
         list(box(width = 2,
-                 div(style = "text-align:center", img(src = movies_in_genre$image_url[(i - 1) * num_movies + j],
+                 div(style = "text-align:center", img(src = movie_url_to_tag(movies_in_genre$image_url[(i - 1) * num_movies + j]),
                                                       style = "max-height:90%; height:90%; width:100%")),
                  div(style = "text-align:center", strong(movies_in_genre$Title[(i - 1) * num_movies + j]))
                  ))
         }))
       )
     })
+    # Add the checkbox list
     choices = rep(0, num_genres)
+    choices = genre_list
     names(choices) = genre_list
     list(
       checkboxGroupInput("genres_checkbox",
@@ -144,17 +155,80 @@ shinyServer(function(input, output, session) {
       ,tmp)
   })
 
+
+  # Calculate top genre recommendations when the submit button is clicked
+  df1 <- eventReactive(input$genre_btn, {
+    withBusyIndicatorServer("genre_btn", { # showing the busy indicator
+        # hide the rating container
+        useShinyjs()
+        jsCode <- "document.querySelector('[data-widget=collapse]').click();"
+        runjs(jsCode)
+
+        num_movies <- SYSTEM_ONE_TOP_N # movies per row
+        num_genres <- length(input$genres_checkbox)
+        # print("input genres checkbox")
+        # print(names(input$genres_checkbox))
+        # print(input$genres_checkbox)
+        recommendations = system_1_recommend(ratings, movies,
+                                             genre_list, genre_matrix,
+                                             input$genres_checkbox)
+        recommendations = recommendations %>%
+                            inner_join(movies, by = 'MovieID')
+        print(recommendations)
+        return(recommendations)
+        # Create the list of divs with each genre heading and 6 images for each genre.
+        # lapply(1:num_genres, function(i) {
+        #   list(
+        #     fluidRow(h3(style = "text-align:center", input$genres_checkbox[i])),
+        #     fluidRow(lapply(1:num_movies, function(j) {
+        #       tmp = recommendations[recommendations$Genre == input$genres_checkbox[i]]
+        #       list(box(width = 2,
+        #                div(style = "text-align:center", img(src = movie_url_to_tag(tmp$image_url[j]),
+        #                                                     style = "max-height:90%; height:90%; width:100%")),
+        #                div(style = "text-align:center", strong(tmp$Title[j]))
+        #       ))
+        #     }))
+        #   )
+        # })
+
+    }) # still busy
+
+  }) # clicked on button
+
   # Show the system 1 genre-based recommendations.
   # Output: thumbnails + top 5 of selected genres.
   output$genre_results <- renderUI({
-    box(width = 12,
-        div(style = "text-align:center", "Placeholder for genre recommendations",
-            #style = "max-height:150; max-width:100%;object-fit: contain;overflow: hidden;"),
-            style = "max-height:150;"),
-      )
+    recom_result <- df1()
+    num_rows <- length(unique(recom_result$Genre))
+    num_movies <- SYSTEM_ONE_TOP_N
+
+    lapply(1:num_rows, function(i) {
+      list(fluidRow(lapply(1:num_movies, function(j) {
+        m_id = recom_result$MovieID[(i - 1) * num_movies + j]
+        row = movies$MovieID == m_id
+        # box(width = 2, status = "success", solidHeader = TRUE, title = paste0("Rank ", (i - 1) * num_movies + j),
+        box(width = 2, status = "success", solidHeader = TRUE, title = paste0("Rank ", j),
+
+          div(style = "text-align:center",
+              a(img(src = movie_url_to_tag(movies$image_url[row]), height = 150))
+          ),
+          div(style="text-align:center; font-size: 100%",
+              strong(movies$Title[row])
+          ),
+          div(style="text-align:center; font-size: 100%",
+              # strong(movies$Genres[recom_result$MovieID[(i - 1) * num_movies + j]])
+              strong(recom_result$Genre[(i - 1) * num_movies + j])
+          )
+        )
+      }))) # columns
+    }) # rows
+
+    # box(width = 12,
+    #     div(style = "text-align:center", "Placeholder for genre recommendations",
+    #         #style = "max-height:150; max-width:100%;object-fit: contain;overflow: hidden;"),
+    #         style = "max-height:150;"),
+    #   )
   })
-
-
 
 
 
@@ -166,9 +240,10 @@ shinyServer(function(input, output, session) {
 
   #=========================================================================================================
 
-  # Calculate top genre recommendations when the submit button is clicked
-  # df <- eventReactive(input$btn, {
-  # })
+
+
+
+
 
   # show the movies to be rated
   output$ratings <- renderUI({
@@ -179,7 +254,7 @@ shinyServer(function(input, output, session) {
     lapply(1:num_rows, function(i) {
       list(fluidRow(lapply(1:num_movies, function(j) {
         list(box(width = 2,
-                 div(style = "text-align:center", img(src = movies$image_url[(i - 1) * num_movies + j],
+                 div(style = "text-align:center", img(src = movie_url_to_tag(movies$image_url[(i - 1) * num_movies + j]),
                                                       style = "max-height:90%; height:90%; width:100%")),
                  # div(style = "text-align:center; color: #999999; font-size: 80%", movies$authors[(i - 1) * num_movies + j]),
                  div(style = "text-align:center", strong(movies$Title[(i - 1) * num_movies + j])),
@@ -190,8 +265,11 @@ shinyServer(function(input, output, session) {
     })
   })
 
+  # https://campuswire.com/c/G3D46BBBA/feed/1272 - Predicted ratings exceed 5 pts?!
+  # https://campuswire.com/c/G3D46BBBA/feed/1275 - How to make movie recommendation for a new user
+  # https://campuswire.com/c/G3D46BBBA/feed/1276 - No ratings for a new user using UBCF
   # Calculate recommendations when the sbumbutton is clicked
-  df <- eventReactive(input$btn, {
+  df2 <- eventReactive(input$btn, {
     withBusyIndicatorServer("btn", { # showing the busy indicator
         # hide the rating container
         useShinyjs()
@@ -237,7 +315,7 @@ shinyServer(function(input, output, session) {
   output$results <- renderUI({
     num_rows <- 4
     num_movies <- 5
-    recom_result <- df()
+    recom_result <- df2()
 
     lapply(1:num_rows, function(i) {
       list(fluidRow(lapply(1:num_movies, function(j) {
