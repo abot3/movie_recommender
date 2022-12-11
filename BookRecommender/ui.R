@@ -28,6 +28,7 @@ ui = dashboardPage(
             tabItems(
               tabItem(tabName = "home",
                   h2("Home tab content"),
+                  actionButton("browser", "Trigger browser()"),
                   div(
                     p("Select on of the recommendation systems in the navbar to get started.") ,
                     br(),

@@ -101,26 +101,47 @@ colnames(genre_matrix) = genre_list
 # server = function(input, output, session) {
 shinyServer(function(input, output, session) {
 
+  # TODO(aaronbotelho) - remove this in the final version
+  observeEvent(input$browser, {
+    browser()
+    1 + 1
+  })
+
   # Show the system 1 movie genres to be selected.
   # Output: thumbnails + genre checkbox.
   output$genres <- renderUI({
     # num_rows <- 20
     num_movies <- 6 # movies per row
-    num_rows <- ceiling(length(genre_list) / num_movies)
+    num_genres <- length(genre_list)
 
     # checkboxInput
+    movies_in_genre = data.frame(matrix(nrow = num_genres*num_movies, ncol = ncol(movies)))
+    colnames(movies_in_genre) = colnames(movies)
+    for(i in 1:num_genres) {
+      s = (i - 1) * num_movies + 1
+      e = s + num_movies - 1
+      movies_in_genre[s:e, ] = movies[which(t(genre_matrix)[i,]==1)[1:num_movies], ]
+    }
 
-    lapply(1:num_rows, function(i) {
-      list(fluidRow(lapply(1:num_movies, function(j) {
+    tmp = lapply(1:num_genres, function(i) {
+      list(
+        fluidRow(h3(style = "text-align:center", genre_list[i])),
+        fluidRow(lapply(1:num_movies, function(j) {
         list(box(width = 2,
-                 div(style = "text-align:center", img(src = movies$image_url[(i - 1) * num_movies + j],
+                 div(style = "text-align:center", img(src = movies_in_genre$image_url[(i - 1) * num_movies + j],
                                                       style = "max-height:90%; height:90%; width:100%")),
-                 # div(style = "text-align:center; color: #999999; font-size: 80%", movies$authors[(i - 1) * num_movies + j]),
-                 div(style = "text-align:center", strong(movies$Title[(i - 1) * num_movies + j])),
-                 #div(style = "text-align:center; font-size: 150%; color: #f0ad4e;", ratingInput(paste0("select_", movies$MovieID[(i - 1) * num_movies + j]), label = "", dataStop = 5))
-                 )) #00c0ef
-      })))
+                 div(style = "text-align:center", strong(movies_in_genre$Title[(i - 1) * num_movies + j]))
+                 ))
+        }))
+      )
     })
+    choices = rep(0, num_genres)
+    names(choices) = genre_list
+    list(
+      checkboxGroupInput("genres_checkbox",
+                         label = "Genre picker",
+                         choices = choices)
+      ,tmp)
   })
 
   # Show the system 1 genre-based recommendations.
