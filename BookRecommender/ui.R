@@ -29,7 +29,7 @@ ui = dashboardPage(
               tabItem(tabName = "home",
                   h2("Home tab content"),
                   # TODO(aaronbotelho) - remove this action button when done dbg.
-                  actionButton("browser", "Trigger browser()"),
+                  # actionButton("browser", "Trigger browser()"),
                   div(
                     p("Select on of the recommendation systems in the navbar to get started.") ,
                     br(),
@@ -94,6 +94,5 @@ ui = dashboardPage(
                    )
               )
             )
-          )
-    )
-# )
+          )  # dashboardBody
+    )  # dashboardPage

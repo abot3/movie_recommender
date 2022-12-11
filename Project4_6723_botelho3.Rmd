@@ -465,9 +465,6 @@ now = now %>%
   group_by(MovieID) %>%
   summarize(
     MovieID = first(MovieID),
-    # Title = first(Title),
-    # Year = first(Year),
-    # RYear = first(RYear),
     Rating = mean(Rating),
     ratings_per_movie = first(ratings_per_movie),
     ratings_per_movie_year = first(ratings_per_movie_year),
@@ -504,15 +501,6 @@ to_order = a %>%
   filter(Rating.x > 4.0) %>%
   arrange(desc(metric1))
 print(to_order, n=30)
-  
-# inner_join(tmp, by = 'MovieID', suffix=c("", ".y")) %>%
-# select(-ends_with(".y")) %>%
-  
-# tmp = ratings %>%
-# left_join(data.frame(MovieID = movies$MovieID, genre_matrix),
-#           by = "MovieID") %>%
-# select(-c("UserID", "MovieID", "Rating", "Timestamp"))
-  
 
 head(tmp, n = 30)
 head(prev[!duplicated(prev$MovieID), ], n = 30)
@@ -570,17 +558,15 @@ test = Rmat[501, ]
 **My Implementation**
 
 ```{r}
-# center
 set.seed(6723)
 nn = 20
 M = 500
 N = N
 
+# center
 newdata = as(test, "matrix")
 newuser.means = rowMeans(newdata, na.rm = TRUE)
 newdata = newdata - newuser.means
-#newdata = t(newdata)
-# assert(dim(newdata) == c(N, 1))
 
 data = as(train, "matrix")
 user.means = rowMeans(data, na.rm = TRUE)
@@ -592,13 +578,6 @@ sim1 = (1 + sim1)/2
 class(sim1)
 
 sim1_mat <- `dim<-`(c(sim1), dim(sim1))
-# sim_df = data.frame(
-#     id = rownames(sim1),
-#     x = sim1_mat) %>%
-#   arrange(desc(x)) %>%
-#   head(nn)
-  # top_n(nn)
-#tail(order(sim1[,1], decreasing = FALSE), 30)
 knn_rows = head(order(sim1[,1], decreasing = TRUE), nn)
 sim_df = data.frame(
     id = rownames(sim1)[knn_rows],
@@ -611,17 +590,12 @@ assert(dim(knn_mat)[1] == nn)
 # nnx1 % t(N,1) -> nn x N i.e. 20 x 3706
 # Note similarity matrix might have NA in it.
 s_coeff_mat = as.matrix(sim_df$x) %*% t(rep(1, N))
-# scalar * nnxN * nnxN
 
 # Zero out the coefficient wherever the k nearest neighbors are NA.
 denom_mat = s_coeff_mat * as.integer(!is.na(knn_mat))
 
-# THE PROBLEM IS THIS DENOMINATOR. IT'S ALWAYS SUMMING ALL COEFFICIENTS
-# WHEN WE SHOULD ONLY INCLUDE COEFFICIENTS WHEN rij != NA.
-# r = (1 / sum(sim_df$x, na.rm=TRUE)) * s_coeff_mat * knn_mat
  r = denom_mat * knn_mat
 # nn x N -> vec len N
-# r = colMeans(r, na.rm = TRUE)
 r = colSums(r, na.rm = TRUE) / colSums(denom_mat, na.rm = FALSE)
 assert(length(r) == N)
 mypred = r
@@ -632,39 +606,6 @@ assert(length(test_user_watched) == N)
 mypred = mypred + newuser.means
 mypred[which(is.infinite(mypred))] = NA
 mypred[which(test_user_watched)] = NA
-
-
-# # Calculate L2 norm of each row.
-# # row_norms = apply(sim, 1, norm, type=c("f"))
-# # row_norms = norm(tc, type="f") * as.matrix(row_norms)
-# row_norms = 1.0 / (as.matrix(sqrt(Matrix::rowSums(sim^2))) * norm(data, type="F"))
-# assert(dim(row_norms) == c(M, 1))
-# sim = (sim %*% data) * row_norms
-# assert(dim(sim) == c(M,1))
-# # Transform range.
-# sim = (sim + 1) / 2.0
-# 
-# sim = data.frame(
-#     id = sim@Dimnames[[1]],
-#     x = sim@x) %>%
-#   arrange(desc(x)) %>% 
-#   top_n(nn)
-# 
-# knn_rows = which(train@data@Dimnames[[1]] %in% sim$id)
-# knn_mat = as.matrix(train@data[knn_rows,])
-# assert(dim(knn_mat)[1] == nn)
-# 
-# 
-# # nnx1 % t(N,1) -> nn x N i.e. 20 x 3706
-# s_coeff_mat = as.matrix(sim$x) %*% t(rep(1, N))
-# # scalar * nnxN * nnxN
-# r = (1 / sum(sim$x)) * s_coeff_mat * knn_mat
-# # nn x N -> vec len N
-# r = colSums(r)
-# assert(length(r) = N)
-# mypred = r
-
-# (c(2,1,4) %*% c(3,1,5)) / (norm(as.matrix(c(2,1,4)), type="F") * norm(as.matrix(c(3,1,5)), type="F"))
 ```
 
 
@@ -682,32 +623,6 @@ p.UBCF <- as.numeric(as(p.UBCF, "matrix"))
 sum(is.na(p.UBCF) != is.na(mypred)) ### should be zero
 max(abs(p.UBCF - mypred), na.rm = TRUE)  ### should be less than 1e-06 
 ```
-
-
-
-```{r}
-# The prof also manually did the similarity matrix like so.
-# > sim = rep(0, dim(data)[1])
-# > for(i in 1:length(sim))
-# +{
-# + tmp.y = as.vector(newdata)
-# + ind.y = which(!is.na(tmp.y)) + tmp.x = data[i, ]
-# +   ind.x = which(!is.na(tmp.x))
-# +   ind  = intersect(ind.x, ind.y)
-# +   if (length(ind) > 0){
-# +
-# +
-# +
-# +}
-# +}
-# > sim = (1 + sim)/2
-# tmp.x = tmp.x[ind]
-# tmp.y = tmp.y[ind]
-# sim[i] = sum(tmp.x * tmp.y) / sqrt(sum(tmp.x^2) * sum(tmp.y^2))
-```
-
-
-
 
 
 
@@ -734,10 +649,8 @@ M = 500
 N = N
 
 newdata = as(test, "matrix")
-#newdata = t(newdata)
 newuser.means = mean(newdata, na.rm = TRUE)
 newdata = newdata - newuser.means
-# assert(dim(newdata) == c(N,1))
 
 data = as(train, "matrix")
 user.means = rowMeans(data, na.rm = TRUE)
@@ -747,7 +660,6 @@ assert(dim(data) == c(M, N))
 active_items_mask = !is.na(newdata)
 active_items_idx = which(active_items_mask)
 
-# sim1 = proxy::simil(t(data), t(data), method = "cosine")
 sim1 = proxy::simil(t(data), method = "cosine")
 assert(dim(sim1) == c(N,N))
 sim1 = (1 + sim1)/2
@@ -783,13 +695,9 @@ all(s_mat[tmp] == sim1_mat[tmp])
 
 # This is going to bring NAs into the matrix
 newdata_prime = t(newdata)
-# newdata_prime[is.na(newdata)] = 0
-# newdata_prime[is.na(newdata)] = NA
 r = t(t(s_mat) * as.vector(newdata_prime))
 r = rowSums(r, na.rm = TRUE)
-#r = t(s_mat) %*% newdata_prime
 r = r / rowSums(s_mat[,active_items_idx], na.rm = TRUE)
-# r = r / rowSums(s_mat[,active_items_idx], na.rm = TRUE)
 
 # nn x N -> vec len N
 assert(length(r) == N)

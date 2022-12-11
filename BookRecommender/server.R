@@ -7,17 +7,13 @@ source('functions/similarity_measures.R') # similarity measures
 # Define utility functions.
 
 movie_url_to_tag = function(url) {
-  # paste0(
-  #   "<img src=\"",
-  USE_REMOTE_IMAGES = FALSE
+  USE_REMOTE_IMAGES = TRUE
   if (USE_REMOTE_IMAGES) {
     small_image_url = "https://liangfgithub.github.io/"
-    return (paste0(small_image_url, x, '?raw=true'))
+    return (paste0(small_image_url, url, '?raw=true'))
   } else {
-    #return (base64enc::dataURI(file=url, mime="image/jpeg"))
     return (url)
   }
-    # "\"></img>")
 }
 
 get_user_ratings = function(value_list) {
@@ -81,7 +77,6 @@ movies$image_url = sapply(movies$MovieID,
                           function(x) paste0("MovieImages/", x, ".jpg"))
 
 
-
 # Build the genre matrix
 genres = as.data.frame(movies$Genres, stringsAsFactors=FALSE)
 tmp = as.data.frame(tstrsplit(genres[,1], '[|]',
@@ -100,13 +95,7 @@ for(i in 1:nrow(tmp)){
 }
 colnames(genre_matrix) = genre_list
 
-# # reshape to movies x user matrix
-# ratingmat <- sparseMatrix(ratings$book_id, ratings$user_id, x=ratings$rating) # book x user matrix
-# ratingmat <- ratingmat[, unique(summary(ratingmat)$j)] # remove users with no ratings
-# dimnames(ratingmat) <- list(book_id = as.character(1:10000), user_id = as.character(sort(unique(ratings$user_id))))
 
-# shinyServer(function(input, output, session) {
-# server = function(input, output, session) {
 shinyServer(function(input, output, session) {
 
   # TODO(aaronbotelho) - remove this in the final version
@@ -130,7 +119,6 @@ shinyServer(function(input, output, session) {
       e = s + num_movies - 1
       movies_in_genre[s:e, ] = movies[which(t(genre_matrix)[i,]==1)[1:num_movies], ]
     }
-
     # Create the list of divs with each genre heading and 6 images for each genre.
     tmp = lapply(1:num_genres, function(i) {
       list(
@@ -144,6 +132,7 @@ shinyServer(function(input, output, session) {
         }))
       )
     })
+
     # Add the checkbox list
     choices = rep(0, num_genres)
     choices = genre_list
@@ -166,30 +155,13 @@ shinyServer(function(input, output, session) {
 
         num_movies <- SYSTEM_ONE_TOP_N # movies per row
         num_genres <- length(input$genres_checkbox)
-        # print("input genres checkbox")
-        # print(names(input$genres_checkbox))
-        # print(input$genres_checkbox)
         recommendations = system_1_recommend(ratings, movies,
                                              genre_list, genre_matrix,
                                              input$genres_checkbox)
         recommendations = recommendations %>%
                             inner_join(movies, by = 'MovieID')
-        print(recommendations)
+        # print(recommendations)
         return(recommendations)
-        # Create the list of divs with each genre heading and 6 images for each genre.
-        # lapply(1:num_genres, function(i) {
-        #   list(
-        #     fluidRow(h3(style = "text-align:center", input$genres_checkbox[i])),
-        #     fluidRow(lapply(1:num_movies, function(j) {
-        #       tmp = recommendations[recommendations$Genre == input$genres_checkbox[i]]
-        #       list(box(width = 2,
-        #                div(style = "text-align:center", img(src = movie_url_to_tag(tmp$image_url[j]),
-        #                                                     style = "max-height:90%; height:90%; width:100%")),
-        #                div(style = "text-align:center", strong(tmp$Title[j]))
-        #       ))
-        #     }))
-        #   )
-        # })
 
     }) # still busy
 
@@ -222,12 +194,6 @@ shinyServer(function(input, output, session) {
         )
       }))) # columns
     }) # rows
-
-    # box(width = 12,
-    #     div(style = "text-align:center", "Placeholder for genre recommendations",
-    #         #style = "max-height:150; max-width:100%;object-fit: contain;overflow: hidden;"),
-    #         style = "max-height:150;"),
-    #   )
   })
 
 
@@ -284,8 +250,8 @@ shinyServer(function(input, output, session) {
         # get the user's rating data
         value_list <- reactiveValuesToList(input)
         user_ratings <- get_user_ratings(value_list)
-        print("User Ratings")
-        print(user_ratings)
+        # print("User Ratings")
+        # print(user_ratings)
 
         results = system_2_recommend(Rmat, user_ratings, rec_UBCF)
 
@@ -293,33 +259,13 @@ shinyServer(function(input, output, session) {
                                      function(x){ max(min(5,x),0) }))
         user_predicted_ids = as.vector(results@items$`0`)
         midxs = which(movies$MovieID %in% user_predicted_ids)
-        print("Midxs")
-        print(midxs)
+        # print("Midxs")
+        # print(midxs)
         recom_results <- data.table(Rank = 1:SYSTEM_TWO_TOP_N,
                                     MovieID = movies$MovieID[midxs],
                                     Title = movies$Title[midxs],
                                     Predicted_rating = user_results,
                                     Row = midxs)
-
-        # # add user's ratings as first column to rating matrix
-        # rmat <- cbind(user_ratings, ratingmat)
-        #
-        # # get the indices of which cells in the matrix should be predicted
-        # # predict all movies the current user has not yet rated
-        # items_to_predict <- which(rmat[, 1] == 0)
-        # prediction_indices <- as.matrix(expand.grid(items_to_predict, 1))
-        #
-        # # run the ubcf-alogrithm
-        # res <- predict_cf(rmat, prediction_indices, "ubcf", TRUE, cal_cos, 1000, FALSE, 2000, 1000)
-        #
-        # # sort, organize, and return the results
-        # user_results <- sort(res[, 1], decreasing = TRUE)[1:20]
-        # user_predicted_ids <- as.numeric(names(user_results))
-        # recom_results <- data.table(Rank = 1:20,
-        #                             Book_id = user_predicted_ids,
-        #                             Title = movies$Title[user_predicted_ids],
-        #                             Predicted_rating =  user_results)
-
     }) # still busy
 
   }) # clicked on button
@@ -331,8 +277,8 @@ shinyServer(function(input, output, session) {
     num_movies <- 5
     assert(num_rows * num_movies == SYSTEM_TWO_TOP_N)
     recom_result <- df2()
-    print("recom_result")
-    print(recom_result)
+    # print("recom_result")
+    # print(recom_result)
 
     lapply(1:num_rows, function(i) {
       list(fluidRow(lapply(1:num_movies, function(j) {
