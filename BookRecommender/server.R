@@ -113,7 +113,8 @@ shinyServer(function(input, output, session) {
     lapply(1:num_rows, function(i) {
       list(fluidRow(lapply(1:num_movies, function(j) {
         list(box(width = 2,
-                 div(style = "text-align:center", img(src = movies$image_url[(i - 1) * num_movies + j], style = "max-height:150")),
+                 div(style = "text-align:center", img(src = movies$image_url[(i - 1) * num_movies + j],
+                                                      style = "max-height:90%; height:90%; width:100%")),
                  # div(style = "text-align:center; color: #999999; font-size: 80%", movies$authors[(i - 1) * num_movies + j]),
                  div(style = "text-align:center", strong(movies$Title[(i - 1) * num_movies + j])),
                  #div(style = "text-align:center; font-size: 150%; color: #f0ad4e;", ratingInput(paste0("select_", movies$MovieID[(i - 1) * num_movies + j]), label = "", dataStop = 5))
@@ -126,10 +127,23 @@ shinyServer(function(input, output, session) {
   # Output: thumbnails + top 5 of selected genres.
   output$genre_results <- renderUI({
     box(width = 12,
-        div(style = "text-align:center", "Placeholder for genre recommendations", style = "max-height:150"),
+        div(style = "text-align:center", "Placeholder for genre recommendations",
+            #style = "max-height:150; max-width:100%;object-fit: contain;overflow: hidden;"),
+            style = "max-height:150;"),
       )
   })
 
+
+
+
+
+
+
+
+
+
+
+  #=========================================================================================================
 
   # Calculate top genre recommendations when the submit button is clicked
   # df <- eventReactive(input$btn, {
@@ -144,10 +158,12 @@ shinyServer(function(input, output, session) {
     lapply(1:num_rows, function(i) {
       list(fluidRow(lapply(1:num_movies, function(j) {
         list(box(width = 2,
-                 div(style = "text-align:center", img(src = movies$image_url[(i - 1) * num_movies + j], style = "max-height:150")),
+                 div(style = "text-align:center", img(src = movies$image_url[(i - 1) * num_movies + j],
+                                                      style = "max-height:90%; height:90%; width:100%")),
                  # div(style = "text-align:center; color: #999999; font-size: 80%", movies$authors[(i - 1) * num_movies + j]),
                  div(style = "text-align:center", strong(movies$Title[(i - 1) * num_movies + j])),
-                 div(style = "text-align:center; font-size: 150%; color: #f0ad4e;", ratingInput(paste0("select_", movies$MovieID[(i - 1) * num_movies + j]), label = "", dataStop = 5))
+                 div(style = "text-align:center; font-size: 150%; color: #f0ad4e;",
+                     ratingInput(paste0("select_", movies$MovieID[(i - 1) * num_movies + j]), label = "", dataStop = 5))
                  )) #00c0ef
       })))
     })

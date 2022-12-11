@@ -39,12 +39,15 @@ ui = dashboardPage(
 
               # First tab content
               tabItem(tabName = "system_1",
-                  h2("System 1 tab content"),
+                  h2("Genres"),
                   # Select genre box
                   fluidRow(
                     box(width = 12, title = "Step 1: Pick your favourite genres.",
-                        status = "info", solidHeader = TRUE, collapsible = TRUE),
-                        div(class = "rateitems", uiOutput('genres'))
+                        status = "info", solidHeader = TRUE, collapsible = TRUE,
+                        div(class = "rateitems",
+                            uiOutput('genres')
+                        )
+                    )
                   ),
 
                   # Output genre results
@@ -65,6 +68,7 @@ ui = dashboardPage(
 
               # Second tab content
               tabItem(tabName = "system_2",
+                  h2("Recommender"),
                   fluidRow(
                       box(width = 12, title = "Step 1: Rate as many movies as possible",
                           status = "info", solidHeader = TRUE, collapsible = TRUE,
