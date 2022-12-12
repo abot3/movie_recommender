@@ -1,6 +1,10 @@
 # Movie Recommender 
 
-This is code for a shiny app for a movie recommender based on collaborative filtering. 
+This is code for a shiny app for a movie recommender based on collaborative filtering.
+
+This app requires your movied images to be placed in the `MovieRecommender/MovieImages/` directory.
+Your working directory should be set to the parent directory of `MovieRecommender`, and run using
+`run_app.R`
 
 References:
 https://github.com/pspachtholz/BookRecommender
