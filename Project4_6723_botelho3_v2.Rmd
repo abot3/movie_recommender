@@ -1,0 +1,768 @@
+---
+title: "Project4_6723_botelho3"
+author: "botelho3"
+date: '2022-12-04'
+output:
+  html_document:
+    toc: yes
+    df_print: paged
+  html_notebook:
+    theme: readable
+    toc: yes
+    toc_float: yes
+---
+
+
+```{r warning=FALSE, include=FALSE}
+library(dplyr)
+library(lubridate)
+library(ggplot2)
+library(recommenderlab)
+library(DT)
+library(data.table)
+library(reshape2)
+```
+
+## Read Data
+
+
+**Load Ratings Data**
+```{r echo=FALSE}
+# use colClasses = 'NULL' to skip columns
+ratings = read.csv('ratings.dat', 
+                   sep = ':',
+                   colClasses = c('integer', 'NULL'), 
+                   header = FALSE)
+colnames(ratings) = c('UserID', 'MovieID', 'Rating', 'Timestamp')
+head(ratings)
+```
+
+**Load Movies Data**
+```{r echo=FALSE}
+movies = readLines('movies.dat')
+movies = strsplit(movies, split = "::", fixed = TRUE, useBytes = TRUE)
+movies = matrix(unlist(movies), ncol = 3, byrow = TRUE)
+movies = data.frame(movies, stringsAsFactors = FALSE)
+colnames(movies) = c('MovieID', 'Title', 'Genres')
+movies$MovieID = as.integer(movies$MovieID)
+
+# convert accented characters
+movies$Title = iconv(movies$Title, "latin1", "UTF-8")
+
+# extract year
+movies$Year = as.numeric(unlist(
+  lapply(movies$Title, function(x) substr(x, nchar(x)-4, nchar(x)-1))))
+head(movies)
+```
+
+**Load User Data**
+```{r echo=FALSE}
+users = read.csv('users.dat',
+                 sep = ':', header = FALSE)
+users = users[, -c(2,4,6,8)] # skip columns
+colnames(users) = c('UserID', 'Gender', 'Age', 'Occupation', 'Zip-code')
+head(users)
+```
+
+
+<!-- ## Exploration -->
+<!-- ```{r} -->
+<!-- dim(users) -->
+<!-- length(unique(ratings$UserID)) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- movies_not_rated = movies %>%  -->
+<!--   filter(!(MovieID %in% ratings$MovieID)) -->
+<!-- dim(movies_not_rated) -->
+<!-- ``` -->
+
+<!-- **Distribution of Ratings** -->
+
+<!-- ```{r} -->
+<!-- tmp = data.frame(Rating = 1:5,  -->
+<!--                  freq = as.vector(table(ratings$Rating)/nrow(ratings))) -->
+<!-- ggplot(data = tmp, aes(x = Rating, y = freq)) + -->
+<!--   geom_bar(stat="identity", fill = 'steelblue', width = 0.6) +  -->
+<!--   geom_text(aes(label=round(freq, dig=2)),  -->
+<!--                 vjust=1.6, color="white", size=3.5) + -->
+<!--   theme_minimal() -->
+<!-- ``` -->
+
+
+<!-- **Ratings Per User** -->
+<!-- ```{r} -->
+<!-- tmp = ratings %>%  -->
+<!--   group_by(UserID) %>%  -->
+<!--   summarize(ratings_per_user = n())  -->
+<!--   summary(tmp$ratings_per_user) -->
+<!--   stem(tmp$ratings_per_user) -->
+<!--   sum(tmp$ratings_per_user > 500) -->
+<!--   sort(tmp$ratings_per_user[tmp$ratings_per_user>1300]) -->
+
+<!-- tmp %>% -->
+<!--   ggplot(aes(ratings_per_user)) + -->
+<!--   geom_bar(fill = "steelblue") + coord_cartesian(c(20, 500)) -->
+
+<!-- #tmp = tmp %>% full_join(users, by = 'UserID') -->
+<!-- ``` -->
+
+<!-- **Ratings Per Movie** -->
+
+<!-- ```{r} -->
+<!-- tmp = ratings %>%  -->
+<!--   group_by(MovieID) %>%  -->
+<!--   summarize(ratings_per_movie = n(), ave_ratings = mean(Rating)) %>% -->
+<!--   inner_join(movies, by = 'MovieID') -->
+<!-- summary(tmp$ratings_per_movie) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- tmp %>%  -->
+<!--   filter(ratings_per_movie > 2000) %>% -->
+<!--   arrange(desc = ratings_per_movie) %>% -->
+<!--   select(c("Title", "ratings_per_movie")) %>% -->
+<!--   print(n = 31) -->
+
+<!-- tmp %>% ggplot(aes(ratings_per_movie)) +  -->
+<!--   geom_bar(fill = "steelblue", width = 1) + coord_cartesian(c(1,1500)) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- small_image_url = "https://liangfgithub.github.io/MovieImages/" -->
+<!-- ratings %>%  -->
+<!--   group_by(MovieID) %>%  -->
+<!--   summarize(ratings_per_movie = n(),  -->
+<!--             ave_ratings = round(mean(Rating), dig=3)) %>% -->
+<!--   inner_join(movies, by = 'MovieID') %>% -->
+<!--   filter(ratings_per_movie > 1000) %>% -->
+<!--   top_n(10, ave_ratings) %>% -->
+<!--   mutate(Image = paste0('<img src="',  -->
+<!--                         small_image_url,  -->
+<!--                         MovieID,  -->
+<!--                         '.jpg?raw=true"></img>')) %>% -->
+<!--   select('Image', 'Title', 'ave_ratings') %>% -->
+<!--   arrange(desc(-ave_ratings)) %>% -->
+<!--   datatable(class = "nowrap hover row-border",  -->
+<!--             escape = FALSE,  -->
+<!--             options = list(dom = 't', -->
+<!--                           scrollX = TRUE, autoWidth = TRUE)) -->
+<!-- ``` -->
+
+
+**Dist of Genres**
+
+Compute matrix of Genres by MovieIDs.
+
+```{r}
+genres = as.data.frame(movies$Genres, stringsAsFactors=FALSE)
+tmp = as.data.frame(tstrsplit(genres[,1], '[|]',
+                              type.convert=TRUE),
+                    stringsAsFactors=FALSE)
+genre_list = c("Action", "Adventure", "Animation", 
+               "Children's", "Comedy", "Crime",
+               "Documentary", "Drama", "Fantasy",
+               "Film-Noir", "Horror", "Musical", 
+               "Mystery", "Romance", "Sci-Fi", 
+               "Thriller", "War", "Western")
+m = length(genre_list)
+genre_matrix = matrix(0, nrow(movies), length(genre_list))
+for(i in 1:nrow(tmp)){
+  genre_matrix[i,genre_list %in% tmp[i,]]=1
+}
+colnames(genre_matrix) = genre_list
+remove("tmp", "genres")
+```
+
+```{r}
+data.frame(Genres = genre_list, 
+                 Freq = as.vector(colMeans(genre_matrix))) %>% 
+  ggplot(aes(reorder(Genres, Freq), Freq, fill = Freq)) + 
+  geom_bar(stat = "identity") + 
+    geom_text(aes(label = round(Freq, dig=2)), 
+            position = position_stack(vjust = 0.5), 
+            color="white", size=3) + 
+  coord_flip() + 
+  scale_colour_brewer(palette="Set1") + 
+  labs(y = 'Frequency', x = 'Genre')
+```
+
+
+```{r}
+tmp = ratings %>% 
+  left_join(data.frame(MovieID = movies$MovieID, genre_matrix), 
+            by = "MovieID") %>%
+  select(-c("UserID", "MovieID", "Rating", "Timestamp"))
+data.frame(Genres = genre_list, 
+           Popularity = as.vector(colMeans(tmp))) %>% 
+  ggplot(aes(reorder(Genres, Popularity), Popularity, fill = Popularity)) + 
+  geom_bar(stat = "identity") + 
+  geom_text(aes(label = round(Popularity, dig=3)), 
+            position = position_stack(vjust = 0.5), 
+            color="white", size=3) + 
+  coord_flip() + 
+  labs(y = 'Popularity', x = 'Genre')
+```
+
+```{r}
+tmp = rowSums(genre_matrix)
+summary(tmp)
+
+movies[which(tmp==6), ]
+movies[which(tmp==5), ]
+```
+
+
+```{r}
+# range(movies$Year) % 1919 to 2000
+tmp = data.frame(Year = movies$Year, genre_matrix) %>%
+  group_by(Year) %>%
+  summarise_all(sum)
+tmp[,-1] = apply(tmp[, -1], 2, cumsum)
+tmp[,-1] = tmp[,-1]/sum(tmp[nrow(tmp), -1])
+print(round(tmp[nrow(tmp),-1], dig=3))
+```
+
+```{r}
+tmp = reshape2::melt(tmp, id.vars="Year") 
+tmp %>%
+  ggplot(aes(Year, value, group = variable)) +
+  geom_area(aes(fill = variable)) + 
+  geom_line(aes(group = variable), position = "stack")
+```
+
+
+
+
+
+
+# System 1 - Recommendation Based on Genres
+
+
+## Data Precprocessing
+
+**Movies Data**
+```{r}
+movies = readLines('movies.dat')
+movies = strsplit(movies, split = "::", fixed = TRUE, useBytes = TRUE)
+movies = matrix(unlist(movies), ncol = 3, byrow = TRUE)
+movies = data.frame(movies, stringsAsFactors = FALSE)
+colnames(movies) = c('MovieID', 'Title', 'Genres')
+movies$MovieID = as.integer(movies$MovieID)
+
+# convert accented characters
+movies$Title[73]
+movies$Title = iconv(movies$Title, "latin1", "UTF-8")
+movies$Title[73]
+
+# extract year
+movies$Year = as.numeric(unlist(
+  lapply(movies$Title, function(x) substr(x, nchar(x)-4, nchar(x)-1))))
+```
+
+**User Data**
+```{r}
+users = read.csv('users.dat',
+                 sep = ':', header = FALSE)
+users = users[, -c(2,4,6,8)] # skip columns
+colnames(users) = c('UserID', 'Gender', 'Age', 'Occupation', 'Zip-code')
+```
+
+
+## Recommendation Algorithm 1
+
+Top five most highly rated movies in a genre.
+
+```{r}
+checkbox_genres = c(genre_list[1], genre_list[8], genre_list[length(genre_list)])
+print(checkbox_genres)
+system_1_recommend <- function(ratings, movies,
+                     genre_list, genre_matrix,
+                     checkbox_genres) {
+  num_genres = length(checkbox_genres)
+  TOP_N = 6
+  joined = ratings %>% 
+    group_by(MovieID) %>% 
+    summarize(ratings_per_movie = n(), ave_ratings = mean(Rating))
+  joined = movies %>%
+    left_join(joined, by = 'MovieID', all.x = TRUE)# %>%
+    #arrange(MovieID)
+ 
+  # Transpose the relevant genres. 
+  row_idx = which(genre_list %in% checkbox_genres) 
+  genre_names = genre_list[row_idx]
+  tgm = t(genre_matrix)
+  tgm = tgm[row_idx, ]
+
+  result_cols =  c("MovieID", "ave_ratings", "Genres", "Genre") 
+  results_list = vector("list", num_genres) 
+  names(results_list) = checkbox_genres
+  results = data.frame(matrix(nrow = num_genres, ncol = 4))
+  colnames(results) <- result_cols
+  for (i in 1:length(row_idx)) {
+    movies_row_idx = which(tgm[i, ] == 1)
+    tmp = joined %>%
+            slice(movies_row_idx) %>%
+            mutate(mean_ratings_per_movie = mean(ratings_per_movie, na.rm = TRUE)) %>%
+            filter(ratings_per_movie > mean_ratings_per_movie) %>%
+            arrange(desc(ave_ratings)) 
+    s = (i-1) * TOP_N + 1
+    e = s + TOP_N - 1
+    c = result_cols[!(result_cols %in% c("Genre"))]
+    results[s:e, c] = tmp[1:TOP_N, c]
+    results[s:e, ]$Genre = genre_names[i]
+    results_list[[i]] = tmp$MovieID[1:TOP_N]
+  }
+  return(results)
+}
+# system_1_results = results
+system_1_results = system_1_recommend(ratings, movies,
+                                      genre_list, genre_matrix, checkbox_genres)
+
+# Display results
+for (g in checkbox_genres) {
+  print(system_1_results[system_1_results$Genre == g, ])
+}
+```
+
+
+## Recommendation Algorithm 2
+
+Most popular movies in the genre.
+
+- Highest number of average ratings. 
+- Discount factor for age. Older movies are likely to have more ratings? So
+discount them.
+
+```{r}
+# Add a ratings_per_movie and ave_ratings column
+tmp = ratings %>% 
+  group_by(MovieID) %>% 
+  summarize(ratings_per_movie = n(), ave_ratings = mean(Rating)) %>%
+  inner_join(movies, by = 'MovieID')
+dim(tmp)
+
+# Add a ratings_per_movie_year column
+tmp = ratings %>% 
+  inner_join(movies, by = 'MovieID') %>%
+  group_by(Year) %>% 
+  mutate(ratings_per_movie_year = n()) %>%
+  group_by(MovieID) %>%
+  summarize(ratings_per_movie = n(), ave_ratings = mean(Rating),
+            ratings_per_movie_year = first(ratings_per_movie_year), Year = first(Year),
+            Title = first(Title))
+dim(tmp)
+
+tmp %>%
+  filter(ratings_per_movie > 2000) %>%
+  arrange(desc(ratings_per_movie)) %>%
+  select(c("Title", "ratings_per_movie", "ratings_per_movie_year", "Year")) %>%
+  print(n = 31)
+
+# unique((tmp %>% group_by(ratings_per_movie))$ratings_per_movie)
+# unique((tmp %>% group_by(ratings_per_movie_year))$ratings_per_movie_year)
+
+# Plot histogram of ratings_per_movie
+tmp %>%
+  group_by(ratings_per_movie) %>%
+  mutate(count = n()) %>%
+  ggplot(., aes(x = ratings_per_movie, y = count)) + 
+  geom_bar(stat='identity', fill = "steelblue", width = 1) + coord_cartesian(c(20, 500))
+
+#  # Same as above just different plotting method.
+# tmp %>%
+#   group_by(ratings_per_movie) %>%
+#   ggplot(., aes(ratings_per_movie)) + 
+#   geom_bar(fill = "steelblue", width = 1) + coord_cartesian(c(20, 500))
+
+# Plot hisogram of movies per year
+tmp %>%
+  group_by(Year) %>%
+  ggplot(aes(Year)) + 
+    geom_bar(fill = "steelblue", width = 1) + coord_cartesian(c(1900,2020))
+
+
+# Plot histogram of reviews_per_movie_year
+tmp %>%
+  group_by(Year) %>%
+  summarize(ratings_per_movie_year = first(ratings_per_movie_year)) %>%
+  ggplot(aes(x = Year, y = ratings_per_movie_year)) + 
+    geom_bar(stat='identity', fill = "steelblue", width = 1) + coord_cartesian(c(1900,2020))
+```
+
+```{r}
+# Add a ratings_per_movie and ave_ratings column
+tmp = ratings %>% 
+  group_by(MovieID) %>% 
+  summarize(ratings_per_movie = n(), ave_ratings = mean(Rating)) %>%
+  inner_join(movies, by = 'MovieID')
+dim(tmp)
+
+# Add a ratings_per_year column
+tmp = ratings %>% 
+  inner_join(movies, by = 'MovieID') %>%
+  group_by(Year) %>% 
+  mutate(ratings_per_movie_year = n()) %>%
+  ungroup %>%
+  group_by(MovieID) %>%
+  summarize(ratings_per_movie = n(), ave_ratings = mean(Rating),
+            ratings_per_movie_year = first(ratings_per_movie_year), Year = first(Year),
+            Title = first(Title))
+
+# tmp = tmp %>%
+#   mutate(pct_ratings_per_year = (ratings_per_movie / ratings_per_movie_year)) %>%
+#   arrange(desc(pct_ratings_per_year))
+
+# Add a ratings_per_last_5_yr
+last_year = 2003
+ratings = ratings %>% 
+  mutate(RYear = year(as_datetime(Timestamp)))
+  # group_by(RYear) %>%
+  # mutate(ratings_per_year = n())
+head(ratings)
+head(tmp)
+```
+
+
+```{r}
+length(which(ratings$RYear == 2000))
+length(which(ratings$RYear == 2001))
+length(which(ratings$RYear == 2002))
+length(which(ratings$RYear == 2003))
+
+# prev = filter(RYear < last_year) %>%
+#   inner_join(tmp, by = 'MovieID', suffix=c("", ".y")) %>%
+#   select(-ends_with(".y")) %>%
+#   group_by(Year) %>% 
+#   mutate(mean_ratings_per_movie_year = n()) %>%
+  
+prev = ratings %>%
+  filter(RYear < 2001) %>%
+  inner_join(movies, by = 'MovieID') %>%
+  group_by(MovieID) %>%
+  mutate(ratings_per_movie = n(),
+         ave_ratings = mean(Rating)) %>%
+  ungroup %>%
+  group_by(Year) %>% 
+  mutate(ratings_per_movie_year = n()) %>%
+  ungroup()
+prev = prev %>%
+  mutate(pct_ratings_per_movie_year =  ratings_per_movie / ratings_per_movie_year)
+
+now = ratings %>%
+  filter(RYear >= 2001) %>%
+  inner_join(movies, by = 'MovieID') %>%
+  group_by(MovieID) %>%
+  mutate(ratings_per_movie = n(),
+         ave_ratings = mean(Rating)) %>%
+  ungroup %>%
+  group_by(Year) %>% 
+  mutate(ratings_per_movie_year = n()) %>%
+  ungroup()
+now = now %>%
+  mutate(pct_ratings_per_movie_year =  ratings_per_movie / ratings_per_movie_year)
+ 
+
+now = now %>% 
+  group_by(MovieID) %>%
+  summarize(
+    MovieID = first(MovieID),
+    Rating = mean(Rating),
+    ratings_per_movie = first(ratings_per_movie),
+    ratings_per_movie_year = first(ratings_per_movie_year),
+    pct_ratings_per_movie_year = first(pct_ratings_per_movie_year),
+    ave_ratings = first(ave_ratings),
+  )
+  
+prev = prev %>% 
+  group_by(MovieID) %>%
+  summarize(
+    MovieID = first(MovieID),
+    Title = first(Title),
+    Rating = mean(Rating),
+    Year = first(Year),
+    RYear = first(RYear),
+    ratings_per_movie = first(ratings_per_movie),
+    ratings_per_movie_year = first(ratings_per_movie_year),
+    pct_ratings_per_movie_year = first(pct_ratings_per_movie_year),
+    ave_ratings = first(ave_ratings),
+  )
+  
+a =  prev %>%
+  full_join(now, by = 'MovieID')
+
+a = a %>%
+  mutate(ratio = pct_ratings_per_movie_year.y / pct_ratings_per_movie_year.x) %>%
+  mutate(diff = pct_ratings_per_movie_year.y - pct_ratings_per_movie_year.x) %>%
+  mutate(ratio2 = ratings_per_movie.y / ratings_per_movie.x) %>%
+  mutate(diff2 = ratings_per_movie.y - ratings_per_movie.x) %>%
+  mutate(metric1 = scale(ratings_per_movie.y) - scale(ratings_per_movie.x))
+
+to_order = a %>%
+  select(MovieID, Title, ratio, diff, ratio2, diff2, metric1, Year, Rating.x) %>%
+  filter(Rating.x > 4.0) %>%
+  arrange(desc(metric1))
+print(to_order, n=30)
+
+head(tmp, n = 30)
+head(prev[!duplicated(prev$MovieID), ], n = 30)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# System 2 - Collaborative Recommendation System
+
+
+
+```{r}
+set.seed(6723)
+library(recommenderlab)
+library(proxy)
+library(testit)
+ratings = read.csv('ratings.dat', 
+                   sep = ':',
+                   colClasses = c('integer', 'NULL'), 
+                   header = FALSE)
+colnames(ratings) = c('UserID', 'MovieID', 'Rating', 'Timestamp')
+i = paste0('u', ratings$UserID)
+j = paste0('m', ratings$MovieID)
+x = ratings$Rating
+tmp = data.frame(i, j, x, stringsAsFactors = T)
+Rmat = sparseMatrix(as.integer(tmp$i), as.integer(tmp$j), x = tmp$x)
+rownames(Rmat) = levels(tmp$i)
+colnames(Rmat) = levels(tmp$j)
+M = dim(Rmat)[1]  # users
+N = dim(Rmat)[2]  # ratings
+Rmat = new('realRatingMatrix', data = Rmat)
+
+train = Rmat[1:500, ]
+test = Rmat[501, ]
+```
+
+
+
+
+### UBCF Recommendation
+
+**My Implementation**
+
+```{r}
+set.seed(6723)
+nn = 20
+M = 500
+N = N
+
+# center
+newdata = as(test, "matrix")
+newuser.means = rowMeans(newdata, na.rm = TRUE)
+newdata = newdata - newuser.means
+
+data = as(train, "matrix")
+user.means = rowMeans(data, na.rm = TRUE)
+data = data - user.means
+assert(dim(data) == c(M, N))
+
+sim1 = proxy::simil(data, newdata, method = "cosine")
+sim1 = (1 + sim1)/2
+class(sim1)
+
+sim1_mat <- `dim<-`(c(sim1), dim(sim1))
+knn_rows = head(order(sim1[,1], decreasing = TRUE), nn)
+sim_df = data.frame(
+    id = rownames(sim1)[knn_rows],
+    x = sim1_mat[knn_rows, 1])
+
+# 20x3706 i.e. nn x N
+knn_mat = data[knn_rows,]
+assert(dim(knn_mat)[1] == nn)
+
+# nnx1 % t(N,1) -> nn x N i.e. 20 x 3706
+# Note similarity matrix might have NA in it.
+s_coeff_mat = as.matrix(sim_df$x) %*% t(rep(1, N))
+
+# Zero out the coefficient wherever the k nearest neighbors are NA.
+denom_mat = s_coeff_mat * as.integer(!is.na(knn_mat))
+
+ r = denom_mat * knn_mat
+# nn x N -> vec len N
+r = colSums(r, na.rm = TRUE) / colSums(denom_mat, na.rm = FALSE)
+assert(length(r) == N)
+mypred = r
+
+# Clean up mypred
+test_user_watched = !is.na(newdata)
+assert(length(test_user_watched) == N)
+mypred = mypred + newuser.means
+mypred[which(is.infinite(mypred))] = NA
+mypred[which(test_user_watched)] = NA
+```
+
+
+**Comparison to Recommenderlab**
+
+```{r}
+recommender.UBCF <- Recommender(train, method = "UBCF",
+                                parameter = list(normalize = 'center', 
+                                                 method = 'Cosine', 
+                                                 nn = 20))
+
+p.UBCF <- predict(recommender.UBCF, test, type="ratings")
+p.UBCF <- as.numeric(as(p.UBCF, "matrix"))
+
+sum(is.na(p.UBCF) != is.na(mypred)) ### should be zero
+max(abs(p.UBCF - mypred), na.rm = TRUE)  ### should be less than 1e-06 
+```
+
+
+
+
+
+
+### IBCF Recommendation
+
+
+
+**My Implementation**
+
+```{r}
+# Check this post https://campuswire.com/c/G3D46BBBA/feed/1326
+# And this post https://campuswire.com/c/G3D46BBBA/feed/1334.
+
+```
+
+```{r}
+set.seed(6723)
+# center
+k = 30
+M = 500
+N = N
+
+newdata = as(test, "matrix")
+newuser.means = mean(newdata, na.rm = TRUE)
+newdata = newdata - newuser.means
+
+data = as(train, "matrix")
+user.means = rowMeans(data, na.rm = TRUE)
+data = data - user.means
+assert(dim(data) == c(M, N))
+
+active_items_mask = !is.na(newdata)
+active_items_idx = which(active_items_mask)
+
+sim1 = proxy::simil(t(data), method = "cosine")
+assert(dim(sim1) == c(N,N))
+sim1 = (1 + sim1)/2
+class(sim1)
+
+# sim1_mat <- `dim<-`(c(sim1), dim(sim1))
+sim1_mat = as.matrix(sim1)
+
+# Remove the diag because they're all ones, which would mess up the ordering
+# See office hours https://mediaspace.illinois.edu/media/t/1_2acmsvby 1:22:19
+# By default empty entries in the similarity matrix should be NA not 0.
+diag(sim1_mat) = NA
+s_mat = matrix(NA, nrow = nrow(sim1_mat), ncol = ncol(sim1_mat))
+#all_col_indices = 1:ncol(sim1_mat)
+for (row in 1:nrow(sim1_mat)) {
+  col_indices = head(order(sim1_mat[row,], decreasing = TRUE), k)
+  col_indices = tail(order(sim1_mat[row,], na.last=FALSE, decreasing = FALSE), k)
+  #inv_col_indices = setdiff(all_col_indices, col_indices)
+  s_mat[row, col_indices] = sim1_mat[row, col_indices]
+}
+assert(dim(s_mat) == c(N,N))
+tmp = !is.na(s_mat)
+all(s_mat[tmp] == sim1_mat[tmp])
+
+# Keep only k nearest neighbor rows.
+
+# # Zero out the coefficient wherever the k nearest neighbors are NA.
+# denom_mat = s_mat * as.integer(!is.na(s_mat))
+
+# THE PROBLEM IS THIS DENOMINATOR. IT'S ALWAYS SUMMING ALL COEFFICIENTS
+# WHEN WE SHOULD ONLY INCLUDE COEFFICIENTS WHEN rij != NA.
+# r = (1 / sum(sim_df$x, na.rm=TRUE)) * s_coeff_mat * knn_mat 
+
+# This is going to bring NAs into the matrix
+newdata_prime = t(newdata)
+r = t(t(s_mat) * as.vector(newdata_prime))
+r = rowSums(r, na.rm = TRUE)
+r = r / rowSums(s_mat[,active_items_idx], na.rm = TRUE)
+
+# nn x N -> vec len N
+assert(length(r) == N)
+mypred = r
+
+# Clean up mypred
+mypred = mypred + newuser.means
+mypred[which(is.infinite(mypred))] = NA
+mypred[active_items_idx] = NA
+```
+
+
+**Comparison to Recommenderlab**
+
+```{r}
+recommender.IBCF <- Recommender(train, method = "IBCF",
+                                parameter = list(normalize = 'center', 
+                                                 method = 'Cosine', 
+                                                 k = 30))
+
+p.IBCF <- predict(recommender.IBCF, test, type="ratings")
+p.IBCF <- as.numeric(as(p.IBCF, "matrix"))
+
+## first output: should be less than 10
+sum(is.na(p.IBCF) != is.na(mypred))  
+
+## second output: should be less than 10%
+mydiff = abs(p.IBCF - mypred)
+sum(mydiff[!is.na(mydiff)] > 1e-6) / sum(!is.na(mydiff)) 
+```
+
+
+**Question: why do we encounter such a big discrepancy for IBCF, but not for
+UBCF?**
+
+IBCF results depend on the ordering of the sorted nearest neighbors when there
+is a tie between two ratings. The different ordering of nearest neighbors
+keeps a different column in the items matrix and later when summing over the rows
+to form the prediction for a new user we get a slightly different result.
+
+
+
+
+
+
+```{r eval=FALSE, echo=FALSE}
+blah = predict(recommender.UBCF, test, type="topN")
+# blah@itemLabels
+items = as.vector(blah@items$`0`)
+items
+ratings = as.vector(blah@ratings$`0`)
+ratings
+mids = movies$MovieID %in% items
+movies[mids, ]
+```
+
+
+
+
+
+
+
+
+
+
+
