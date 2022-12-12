@@ -238,6 +238,10 @@ tmp %>%
 
 # System 1 - Recommendation Based on Genres
 
+In this section 2 recommendation algorithms are proposed. Both algorithms take
+a list of genres as input and produce a ranking of the best movies in that genre
+based on the corpus. The corpus is a collection of ratings by users on the site
+Movielens.org from 2000 to 2003.
 
 ## Data Precprocessing
 
@@ -271,11 +275,14 @@ colnames(users) = c('UserID', 'Gender', 'Age', 'Occupation', 'Zip-code')
 
 ## Recommendation Algorithm 1
 
-Top five most highly rated movies in a genre.
+The first algorithm simply returns the top 5 movies in each genre, ranked in
+descending order based on their average rating.
 
 ```{r}
 checkbox_genres = c(genre_list[1], genre_list[8], genre_list[length(genre_list)])
+print("Genres chosen:")
 print(checkbox_genres)
+
 system_1_recommend <- function(ratings, movies,
                      genre_list, genre_matrix,
                      checkbox_genres) {
@@ -285,8 +292,7 @@ system_1_recommend <- function(ratings, movies,
     group_by(MovieID) %>% 
     summarize(ratings_per_movie = n(), ave_ratings = mean(Rating))
   joined = movies %>%
-    left_join(joined, by = 'MovieID', all.x = TRUE)# %>%
-    #arrange(MovieID)
+    left_join(joined, by = 'MovieID', all.x = TRUE)
  
   # Transpose the relevant genres. 
   row_idx = which(genre_list %in% checkbox_genres) 
@@ -315,7 +321,7 @@ system_1_recommend <- function(ratings, movies,
   }
   return(results)
 }
-# system_1_results = results
+
 system_1_results = system_1_recommend(ratings, movies,
                                       genre_list, genre_matrix, checkbox_genres)
 
@@ -333,6 +339,7 @@ Most popular movies in the genre.
 - Highest number of average ratings. 
 - Discount factor for age. Older movies are likely to have more ratings? So
 discount them.
+
 
 ```{r}
 # Add a ratings_per_movie and ave_ratings column
@@ -525,9 +532,11 @@ head(prev[!duplicated(prev$MovieID), ], n = 30)
 
 # System 2 - Collaborative Recommendation System
 
+Generating a sparse matrix where each row represents a unique user and each
+column represents a unique item (movie). Slicing by row gives the ratings of
+each item for a single user.
 
-
-```{r}
+```{r message=FALSE}
 set.seed(6723)
 library(recommenderlab)
 library(proxy)
@@ -554,8 +563,9 @@ test = Rmat[501, ]
 
 
 
-
 ### UBCF Recommendation
+
+The following is an implementation of User-Based Collaborative Filtering.
 
 **My Implementation**
 
@@ -633,17 +643,13 @@ max(abs(p.UBCF - mypred), na.rm = TRUE)  ### should be less than 1e-06
 
 ### IBCF Recommendation
 
-
+The following is an implementation of Item-Based Collaborative Filtering.
 
 **My Implementation**
 
 ```{r}
 # Check this post https://campuswire.com/c/G3D46BBBA/feed/1326
 # And this post https://campuswire.com/c/G3D46BBBA/feed/1334.
-
-```
-
-```{r}
 set.seed(6723)
 # center
 k = 30
@@ -675,11 +681,9 @@ sim1_mat = as.matrix(sim1)
 # By default empty entries in the similarity matrix should be NA not 0.
 diag(sim1_mat) = NA
 s_mat = matrix(NA, nrow = nrow(sim1_mat), ncol = ncol(sim1_mat))
-#all_col_indices = 1:ncol(sim1_mat)
 for (row in 1:nrow(sim1_mat)) {
   col_indices = head(order(sim1_mat[row,], decreasing = TRUE), k)
   col_indices = tail(order(sim1_mat[row,], na.last=FALSE, decreasing = FALSE), k)
-  #inv_col_indices = setdiff(all_col_indices, col_indices)
   s_mat[row, col_indices] = sim1_mat[row, col_indices]
 }
 assert(dim(s_mat) == c(N,N))
@@ -687,14 +691,6 @@ tmp = !is.na(s_mat)
 all(s_mat[tmp] == sim1_mat[tmp])
 
 # Keep only k nearest neighbor rows.
-
-# # Zero out the coefficient wherever the k nearest neighbors are NA.
-# denom_mat = s_mat * as.integer(!is.na(s_mat))
-
-# THE PROBLEM IS THIS DENOMINATOR. IT'S ALWAYS SUMMING ALL COEFFICIENTS
-# WHEN WE SHOULD ONLY INCLUDE COEFFICIENTS WHEN rij != NA.
-# r = (1 / sum(sim_df$x, na.rm=TRUE)) * s_coeff_mat * knn_mat 
-
 # This is going to bring NAs into the matrix
 newdata_prime = t(newdata)
 r = t(t(s_mat) * as.vector(newdata_prime))
@@ -745,7 +741,7 @@ to form the prediction for a new user we get a slightly different result.
 
 
 
-```{r eval=FALSE, echo=FALSE}
+```{r eval=FALSE, echo=FALSE, include=FALSE}
 blah = predict(recommender.UBCF, test, type="topN")
 # blah@itemLabels
 items = as.vector(blah@items$`0`)
