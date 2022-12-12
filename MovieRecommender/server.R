@@ -1,5 +1,8 @@
 ## server.R
 
+library(magrittr)
+library(dplyr)
+
 # load functions
 source('functions/cf_algorithm.R') # collaborative filtering
 
@@ -104,10 +107,10 @@ colnames(genre_matrix) = genre_list
 shinyServer(function(input, output, session) {
 
   # TODO(aaronbotelho) - remove this in the final version
-  observeEvent(input$browser, {
-    browser()
-    1 + 1
-  })
+  # observeEvent(input$browser, {
+  #   browser()
+  #   1 + 1
+  # })
 
   # Show the system 1 movie genres to be selected.
   # Output: thumbnails + genre checkbox.
