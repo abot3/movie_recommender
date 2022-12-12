@@ -71,12 +71,16 @@ system_2_recommend <- function(Rmat, ratings, rec_UBCF) {
   n.item = ncol(Rmat)
   new.ratings = rep(NA, n.item)
   new.ratings[which(movieIDs %in% mids)] = ratings$Rating
-  # new.ratings[which(movieIDs == "m1193")] = 5
-  # new.ratings[which(movieIDs == "m661")] = 3
-  # new.ratings[which(movieIDs == "m76")] = 1
-  # new.ratings[which(movieIDs == "m2106")] = 2
-  # new.ratings[which(movieIDs == "m2804")] = 2
-  # new.ratings[which(movieIDs == "m919")] = 4
+  # If all ratings are equal we can end up with NA predictions, so inject
+  # at least 1 of each rating to avoid this degenerate case.
+  if (length(unique(ratings$Rating))) {
+    new.ratings[which(movieIDs == "m1193")] = 5
+    new.ratings[which(movieIDs == "m661")] = 3
+    new.ratings[which(movieIDs == "m76")] = 1
+    new.ratings[which(movieIDs == "m2106")] = 2
+    new.ratings[which(movieIDs == "m2804")] = 2
+    new.ratings[which(movieIDs == "m919")] = 4
+  }
   new.user = matrix(new.ratings,
                     nrow=1, ncol=n.item,
                     dimnames = list(

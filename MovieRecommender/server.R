@@ -27,7 +27,12 @@ get_user_ratings = function(value_list) {
 
 
 # Read in ratings data.
-ratings = read.csv('data/ratings.dat',
+# ratings = read.csv('data/ratings.dat',
+#                    sep = ':',
+#                    colClasses = c('integer', 'NULL'),
+#                    header = FALSE)
+myurl = "https://liangfgithub.github.io/MovieData/"
+ratings = read.csv(paste0(myurl, 'ratings.dat?raw=true'),
                    sep = ':',
                    colClasses = c('integer', 'NULL'),
                    header = FALSE)
@@ -57,8 +62,9 @@ if (all(file.exists("rec.rds"))) {
 
 
 # Read in movies data.
-# myurl = "https://liangfgithub.github.io/MovieData/"
-movies = readLines('data/movies.dat')
+myurl = "https://liangfgithub.github.io/MovieData/"
+# movies = readLines('data/movies.dat')
+movies = readLines(paste0(myurl, 'movies.dat?raw=true'))
 movies = strsplit(movies, split = "::", fixed = TRUE, useBytes = TRUE)
 movies = matrix(unlist(movies), ncol = 3, byrow = TRUE)
 movies = data.frame(movies, stringsAsFactors = FALSE)
