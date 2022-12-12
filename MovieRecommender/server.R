@@ -2,7 +2,6 @@
 
 # load functions
 source('functions/cf_algorithm.R') # collaborative filtering
-source('functions/similarity_measures.R') # similarity measures
 
 # Define utility functions.
 
