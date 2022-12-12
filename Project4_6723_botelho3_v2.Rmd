@@ -487,12 +487,6 @@ rpy
 Putting it all together.
 
 ```{r}
-# prev = filter(RYear < last_year) %>%
-#   inner_join(tmp, by = 'MovieID', suffix=c("", ".y")) %>%
-#   select(-ends_with(".y")) %>%
-#   group_by(Year) %>% 
-#   mutate(mean_ratings_per_movie_year = n()) %>%
-
 # Create a data set of movies in year [2000].
 # Compute the ratings per movie, ratings per production year.
 prev = ratings %>%
