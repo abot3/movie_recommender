@@ -351,8 +351,9 @@ year of the rating, and the year of the movie.
 <!-- - Discount factor for age. Older movies are likely to have more ratings? So -->
 <!-- discount them. -->
 
+Load data. 
 
-```{r echo=FALSE}
+```{r echo=TRUE}
 # Add a ratings_per_movie and ave_ratings column
 tmp = ratings %>% 
   group_by(MovieID) %>% 
@@ -374,16 +375,13 @@ tmp %>%
   arrange(desc(ratings_per_movie)) %>%
   select(c("Title", "ratings_per_movie", "ratings_per_movie_year", "Year")) %>%
   head()
-
-# unique((tmp %>% group_by(ratings_per_movie))$ratings_per_movie)
-# unique((tmp %>% group_by(ratings_per_movie_year))$ratings_per_movie_year)
 ```
 
 Plot histogram of ratings_per_movie. Very skewed towards individual movies with
 a lot of ratings. We need to normalize the popularity of movies in some way, to
 be able to compare popularity across movies.
 
-```{r echo=FALSE}
+```{r echo=TRUE}
 tmp %>%
   group_by(ratings_per_movie) %>%
   mutate(count = n()) %>%
@@ -400,13 +398,7 @@ In our case the popularity of a movie from a given year could be defined as the
 percent of the mean ratings for a movie produced in that year
 `pct = #_ratings_movie_a_in_yr_2000 / mean_ratings_of_movies_in_year_2000`.
 
-```{r echo=FALSE}
-#  # Same as above just different plotting method.
-# tmp %>%
-#   group_by(ratings_per_movie) %>%
-#   ggplot(., aes(ratings_per_movie)) + 
-#   geom_bar(fill = "steelblue", width = 1) + coord_cartesian(c(20, 500))
-
+```{r echo=TRUE}
 # Plot histogram of movies per year
 tmp %>%
   group_by(Year) %>%
@@ -426,7 +418,7 @@ considering a weighted mean of ratings in a sliding 5 year window.
 In our case the popularity of a movie from a given year could be defined as the
 percent of the mean ratings in that year`pct = #_ratings_movie_a_in_yr_2000 / mean_movie_ratings_in_year_2000`.
 
-```{r echo=FALSE}
+```{r echo=TRUE}
 tmp %>%
   group_by(Year) %>%
   summarize(ratings_per_movie_year = first(ratings_per_movie_year)) %>%
@@ -573,15 +565,11 @@ checkbox_genres
 
 
 ```{r}
+# Filter by genre. Select only MovieIDs that contain the correct genre.
 row_idx = which(genre_list %in% checkbox_genres) 
-tgm = t(genre_matrix)
+tgm = t(genre_matrix)  # tgm transposed genre matrix.
 tgm = tgm[row_idx, ]
 
-# result_cols =  c("MovieID", "ave_ratings", "Genres", "Genre") 
-# results_list = vector("list", num_genres) 
-# names(results_list) = checkbox_genres
-# results = data.frame(matrix(nrow = num_genres, ncol = 4))
-# colnames(results) <- result_cols
 results = c()
 for (i in 1:length(row_idx)) {
   movies_row_idx = which(tgm[i, ] == 1)
