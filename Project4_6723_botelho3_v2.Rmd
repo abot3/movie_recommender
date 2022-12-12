@@ -23,7 +23,7 @@ library(data.table)
 library(reshape2)
 ```
 
-## Read Data
+## Load Data
 
 
 **Load Ratings Data**
@@ -152,7 +152,7 @@ head(users)
 
 **Dist of Genres**
 
-Compute matrix of Genres by MovieIDs.
+Compute matrix of Genres vs. MovieIDs (rows: Genre, cols: MovieIDs).
 
 ```{r}
 genres = as.data.frame(movies$Genres, stringsAsFactors=FALSE)
@@ -174,7 +174,7 @@ colnames(genre_matrix) = genre_list
 remove("tmp", "genres")
 ```
 
-```{r}
+```{r, echo=FALSE}
 data.frame(Genres = genre_list, 
                  Freq = as.vector(colMeans(genre_matrix))) %>% 
   ggplot(aes(reorder(Genres, Freq), Freq, fill = Freq)) + 
@@ -188,48 +188,48 @@ data.frame(Genres = genre_list,
 ```
 
 
-```{r}
-tmp = ratings %>% 
-  left_join(data.frame(MovieID = movies$MovieID, genre_matrix), 
-            by = "MovieID") %>%
-  select(-c("UserID", "MovieID", "Rating", "Timestamp"))
-data.frame(Genres = genre_list, 
-           Popularity = as.vector(colMeans(tmp))) %>% 
-  ggplot(aes(reorder(Genres, Popularity), Popularity, fill = Popularity)) + 
-  geom_bar(stat = "identity") + 
-  geom_text(aes(label = round(Popularity, dig=3)), 
-            position = position_stack(vjust = 0.5), 
-            color="white", size=3) + 
-  coord_flip() + 
-  labs(y = 'Popularity', x = 'Genre')
-```
+<!-- ```{r} -->
+<!-- tmp = ratings %>%  -->
+<!--   left_join(data.frame(MovieID = movies$MovieID, genre_matrix),  -->
+<!--             by = "MovieID") %>% -->
+<!--   select(-c("UserID", "MovieID", "Rating", "Timestamp")) -->
+<!-- data.frame(Genres = genre_list,  -->
+<!--            Popularity = as.vector(colMeans(tmp))) %>%  -->
+<!--   ggplot(aes(reorder(Genres, Popularity), Popularity, fill = Popularity)) +  -->
+<!--   geom_bar(stat = "identity") +  -->
+<!--   geom_text(aes(label = round(Popularity, dig=3)),  -->
+<!--             position = position_stack(vjust = 0.5),  -->
+<!--             color="white", size=3) +  -->
+<!--   coord_flip() +  -->
+<!--   labs(y = 'Popularity', x = 'Genre') -->
+<!-- ``` -->
 
-```{r}
-tmp = rowSums(genre_matrix)
-summary(tmp)
+<!-- ```{r} -->
+<!-- tmp = rowSums(genre_matrix) -->
+<!-- summary(tmp) -->
 
-movies[which(tmp==6), ]
-movies[which(tmp==5), ]
-```
+<!-- movies[which(tmp==6), ] -->
+<!-- movies[which(tmp==5), ] -->
+<!-- ``` -->
 
 
-```{r}
-# range(movies$Year) % 1919 to 2000
-tmp = data.frame(Year = movies$Year, genre_matrix) %>%
-  group_by(Year) %>%
-  summarise_all(sum)
-tmp[,-1] = apply(tmp[, -1], 2, cumsum)
-tmp[,-1] = tmp[,-1]/sum(tmp[nrow(tmp), -1])
-print(round(tmp[nrow(tmp),-1], dig=3))
-```
+<!-- ```{r} -->
+<!-- # range(movies$Year) % 1919 to 2000 -->
+<!-- tmp = data.frame(Year = movies$Year, genre_matrix) %>% -->
+<!--   group_by(Year) %>% -->
+<!--   summarise_all(sum) -->
+<!-- tmp[,-1] = apply(tmp[, -1], 2, cumsum) -->
+<!-- tmp[,-1] = tmp[,-1]/sum(tmp[nrow(tmp), -1]) -->
+<!-- print(round(tmp[nrow(tmp),-1], dig=3)) -->
+<!-- ``` -->
 
-```{r}
-tmp = reshape2::melt(tmp, id.vars="Year") 
-tmp %>%
-  ggplot(aes(Year, value, group = variable)) +
-  geom_area(aes(fill = variable)) + 
-  geom_line(aes(group = variable), position = "stack")
-```
+<!-- ```{r} -->
+<!-- tmp = reshape2::melt(tmp, id.vars="Year")  -->
+<!-- tmp %>% -->
+<!--   ggplot(aes(Year, value, group = variable)) + -->
+<!--   geom_area(aes(fill = variable)) +  -->
+<!--   geom_line(aes(group = variable), position = "stack") -->
+<!-- ``` -->
 
 
 
@@ -243,10 +243,7 @@ a list of genres as input and produce a ranking of the best movies in that genre
 based on the corpus. The corpus is a collection of ratings by users on the site
 Movielens.org from 2000 to 2003.
 
-## Data Precprocessing
-
-**Movies Data**
-```{r}
+```{r include=FALSE}
 movies = readLines('movies.dat')
 movies = strsplit(movies, split = "::", fixed = TRUE, useBytes = TRUE)
 movies = matrix(unlist(movies), ncol = 3, byrow = TRUE)
@@ -264,8 +261,7 @@ movies$Year = as.numeric(unlist(
   lapply(movies$Title, function(x) substr(x, nchar(x)-4, nchar(x)-1))))
 ```
 
-**User Data**
-```{r}
+```{r include=FALSE}
 users = read.csv('users.dat',
                  sep = ':', header = FALSE)
 users = users[, -c(2,4,6,8)] # skip columns
@@ -280,9 +276,12 @@ descending order based on their average rating.
 
 ```{r}
 checkbox_genres = c(genre_list[1], genre_list[8], genre_list[length(genre_list)])
-print("Genres chosen:")
-print(checkbox_genres)
+```
+```{r echo=FALSE}
+checkbox_genres
+```
 
+```{r}
 system_1_recommend <- function(ratings, movies,
                      genre_list, genre_matrix,
                      checkbox_genres) {
@@ -334,20 +333,31 @@ for (g in checkbox_genres) {
 
 ## Recommendation Algorithm 2
 
-Most popular movies in the genre.
+Unlike algorithm 1 above I want this algorithm to attempt to consider which
+movies are *trending*. Trending in this case should mean that the `trending`
+movies are receiving relatively more attention (ratings) in the last year. Since
+we only have a dataset of ratings per movie, not e.g. downloads or ticket sales
+per movie, we will use the number of ratings and the rating values as a proxy
+for popularity. Similar to algorithm one we will try to incorporate genre 
+restrictions.
 
-- Highest number of average ratings. 
-- Discount factor for age. Older movies are likely to have more ratings? So
-discount them.
+In order to determine whether or not a movie is receiving more attention in
+recent years we will need to normalize the number of ratings based on the
+year of the rating, and the year of the movie.
+
+<!-- Most popular movies in the genre. -->
+
+<!-- - Highest number of average ratings.  -->
+<!-- - Discount factor for age. Older movies are likely to have more ratings? So -->
+<!-- discount them. -->
 
 
-```{r}
+```{r echo=FALSE}
 # Add a ratings_per_movie and ave_ratings column
 tmp = ratings %>% 
   group_by(MovieID) %>% 
   summarize(ratings_per_movie = n(), ave_ratings = mean(Rating)) %>%
   inner_join(movies, by = 'MovieID')
-dim(tmp)
 
 # Add a ratings_per_movie_year column
 tmp = ratings %>% 
@@ -358,38 +368,65 @@ tmp = ratings %>%
   summarize(ratings_per_movie = n(), ave_ratings = mean(Rating),
             ratings_per_movie_year = first(ratings_per_movie_year), Year = first(Year),
             Title = first(Title))
-dim(tmp)
 
 tmp %>%
   filter(ratings_per_movie > 2000) %>%
   arrange(desc(ratings_per_movie)) %>%
   select(c("Title", "ratings_per_movie", "ratings_per_movie_year", "Year")) %>%
-  print(n = 31)
+  head()
 
 # unique((tmp %>% group_by(ratings_per_movie))$ratings_per_movie)
 # unique((tmp %>% group_by(ratings_per_movie_year))$ratings_per_movie_year)
+```
 
-# Plot histogram of ratings_per_movie
+Plot histogram of ratings_per_movie. Very skewed towards individual movies with
+a lot of ratings. We need to normalize the popularity of movies in some way, to
+be able to compare popularity across movies.
+
+```{r echo=FALSE}
 tmp %>%
   group_by(ratings_per_movie) %>%
   mutate(count = n()) %>%
   ggplot(., aes(x = ratings_per_movie, y = count)) + 
   geom_bar(stat='identity', fill = "steelblue", width = 1) + coord_cartesian(c(20, 500))
+```
 
+Plot histogram of movies released per year. The movies in the dataset are skewed
+towards the year 2000. A recommendation algorithm may wish to normalize the data
+in some way relative to the number of movies released in the same (or neighboring)
+years.
+
+In our case the popularity of a movie from a given year could be defined as the
+percent of the mean ratings for a movie produced in that year
+`pct = #_ratings_movie_a_in_yr_2000 / mean_ratings_of_movies_in_year_2000`.
+
+```{r echo=FALSE}
 #  # Same as above just different plotting method.
 # tmp %>%
 #   group_by(ratings_per_movie) %>%
 #   ggplot(., aes(ratings_per_movie)) + 
 #   geom_bar(fill = "steelblue", width = 1) + coord_cartesian(c(20, 500))
 
-# Plot hisogram of movies per year
+# Plot histogram of movies per year
 tmp %>%
   group_by(Year) %>%
   ggplot(aes(Year)) + 
     geom_bar(fill = "steelblue", width = 1) + coord_cartesian(c(1900,2020))
 
+```
 
-# Plot histogram of reviews_per_movie_year
+Plot histogram of reviews_per_movie_year. All ratings in the dataset are from 2000-2004.
+Again, like movies released per year above,
+the number of reviews is skewed towards recent movies (movies released close to 2000).
+A good recommendation algorithm may wish to choose an algorithm that considers
+the total number of ratings for the average movie in a similar year, E.g.
+considering a weighted mean of ratings in a sliding 5 year window.
+
+
+In our case the popularity of a movie from a given year could be defined as the
+percent of the mean ratings in that year`pct = #_ratings_movie_a_in_yr_2000 / mean_movie_ratings_in_year_2000`.
+
+```{r echo=FALSE}
 tmp %>%
   group_by(Year) %>%
   summarize(ratings_per_movie_year = first(ratings_per_movie_year)) %>%
@@ -397,13 +434,15 @@ tmp %>%
     geom_bar(stat='identity', fill = "steelblue", width = 1) + coord_cartesian(c(1900,2020))
 ```
 
+- Add a ratings_per_movie and ave_ratings column.
+- Add a ratings_per_year column. The number of ratings in a given year.
+
 ```{r}
 # Add a ratings_per_movie and ave_ratings column
 tmp = ratings %>% 
   group_by(MovieID) %>% 
   summarize(ratings_per_movie = n(), ave_ratings = mean(Rating)) %>%
   inner_join(movies, by = 'MovieID')
-dim(tmp)
 
 # Add a ratings_per_year column
 tmp = ratings %>% 
@@ -416,10 +455,6 @@ tmp = ratings %>%
             ratings_per_movie_year = first(ratings_per_movie_year), Year = first(Year),
             Title = first(Title))
 
-# tmp = tmp %>%
-#   mutate(pct_ratings_per_year = (ratings_per_movie / ratings_per_movie_year)) %>%
-#   arrange(desc(pct_ratings_per_year))
-
 # Add a ratings_per_last_5_yr
 last_year = 2003
 ratings = ratings %>% 
@@ -430,19 +465,36 @@ head(ratings)
 head(tmp)
 ```
 
+How many ratings are there in each of the 4 years in the dataset? Year 2000 has
+more ratings than all other years combined. So to measure `trendiness` or popularity
+let's compare rating behaviours in `[2001, 2002, 2003]` against the baseline `[2000]`.
+Let's define popular movies as movies that received more ratings in 2001-2003
+than they did in 2000. This comparison requires the number of ratings to be
+normalized by the number of ratings in the two time windows. We should also 
+normalize by the year the movies were released as older movies receive less ratings
+regardless of whether we're looking at ratings data between 2001-2003 or 2004, i.e.
+there are less reviewers of 1950s movies than 1990s movies in the 200s.
 
 ```{r}
-length(which(ratings$RYear == 2000))
-length(which(ratings$RYear == 2001))
-length(which(ratings$RYear == 2002))
-length(which(ratings$RYear == 2003))
+rpy = rep(0, 4)
+rpy[1] = length(which(ratings$RYear == 2000))
+rpy[2] = length(which(ratings$RYear == 2001))
+rpy[3] = length(which(ratings$RYear == 2002))
+rpy[4] = length(which(ratings$RYear == 2003))
+rpy
+```
 
+Putting it all together.
+
+```{r}
 # prev = filter(RYear < last_year) %>%
 #   inner_join(tmp, by = 'MovieID', suffix=c("", ".y")) %>%
 #   select(-ends_with(".y")) %>%
 #   group_by(Year) %>% 
 #   mutate(mean_ratings_per_movie_year = n()) %>%
-  
+
+# Create a data set of movies in year [2000].
+# Compute the ratings per movie, ratings per production year.
 prev = ratings %>%
   filter(RYear < 2001) %>%
   inner_join(movies, by = 'MovieID') %>%
@@ -456,6 +508,8 @@ prev = ratings %>%
 prev = prev %>%
   mutate(pct_ratings_per_movie_year =  ratings_per_movie / ratings_per_movie_year)
 
+# Create a data set of movies in year [2001, 2002, 2003] 
+# Compute the ratings per movie, ratings per production year.
 now = ratings %>%
   filter(RYear >= 2001) %>%
   inner_join(movies, by = 'MovieID') %>%
@@ -468,8 +522,17 @@ now = ratings %>%
   ungroup()
 now = now %>%
   mutate(pct_ratings_per_movie_year =  ratings_per_movie / ratings_per_movie_year)
- 
+```
 
+Now we can compute 4 metrics and add them as columns, i.e. we will compute these
+columns for each unique MovieID (row) in the matrix.
+
+- ratings_per_movie: # of ratings for each movie.
+- ratings_per_movie_year: # of all ratings of all movies produced in year X. E.g. X = 1959.
+- pct_ratings_per_movie_year: % of all ratings of all movies produced in year X. E.g. X = 1959.
+- ave_ratings: mean rating for each movie.
+
+```{r}
 now = now %>% 
   group_by(MovieID) %>%
   summarize(
@@ -494,38 +557,96 @@ prev = prev %>%
     pct_ratings_per_movie_year = first(pct_ratings_per_movie_year),
     ave_ratings = first(ave_ratings),
   )
-  
+
+# Join now (2001-2003) and prev (2000) datasets on MovieID.
+# Now we have 2 copies of the  ratings_per_movie and pct_ratings_per_movie_year
+# columns, 1 from each datset.
 a =  prev %>%
   full_join(now, by = 'MovieID')
+```
 
+Now that we have some metrics defined we can compare the metrics across the two
+time periods (`[2000], [2001, 2003]`), to determine the trendiest movies.
+
+Again we can filter by genre first.
+
+```{r}
+checkbox_genres = c(genre_list[1], genre_list[8], genre_list[length(genre_list)])
+```
+```{r echo=FALSE}
+checkbox_genres
+```
+
+
+```{r}
+row_idx = which(genre_list %in% checkbox_genres) 
+tgm = t(genre_matrix)
+tgm = tgm[row_idx, ]
+
+# result_cols =  c("MovieID", "ave_ratings", "Genres", "Genre") 
+# results_list = vector("list", num_genres) 
+# names(results_list) = checkbox_genres
+# results = data.frame(matrix(nrow = num_genres, ncol = 4))
+# colnames(results) <- result_cols
+results = c()
+for (i in 1:length(row_idx)) {
+  movies_row_idx = which(tgm[i, ] == 1)
+  results = union(results, movies$MovieID[movies_row_idx])
+}
+
+a = a %>%
+    filter(MovieID %in% results)
+head(a)
+```
+
+Now we can diff the metrics between period `x = 2000`  and `y = [2001, 2002, 2003]`.
+I tried 5 different algorithms.
+1. ratio of percent of all ratings for movies produced in a year Z in x vs y, `pct_y / pct_x`.
+An increase in this ratio indicates trendiness.
+2. difference in percent of all ratings for movies produced in a year Z in x vs y, `pct_y - pct_x`.
+An increase in this difference indicates trendiness.
+3. ratio of ratings for a *single* movie in period y vs. x, `ratings_y / ratings_x`.
+4. difference of ratings for a *single* movie in period y vs. x, `ratings_y - ratings_x`.
+5. difference of normalized (centered, scaled) ratings for a *single* movie in period y vs. x,
+`scale(ratings_y) - scale(ratings_x)`.
+6. ratio of normalized (centered, scaled) ratings for a *single* movie in period y vs. x,
+`scale(ratings_y) / scale(ratings_x)`.
+
+```{r}
+# Now we can compare the 
 a = a %>%
   mutate(ratio = pct_ratings_per_movie_year.y / pct_ratings_per_movie_year.x) %>%
   mutate(diff = pct_ratings_per_movie_year.y - pct_ratings_per_movie_year.x) %>%
   mutate(ratio2 = ratings_per_movie.y / ratings_per_movie.x) %>%
   mutate(diff2 = ratings_per_movie.y - ratings_per_movie.x) %>%
-  mutate(metric1 = scale(ratings_per_movie.y) - scale(ratings_per_movie.x))
+  mutate(metric1 = scale(ratings_per_movie.y) - scale(ratings_per_movie.x)) %>%
+  mutate(metric2 = scale(ratings_per_movie.y) / scale(ratings_per_movie.x))
 
 to_order = a %>%
-  select(MovieID, Title, ratio, diff, ratio2, diff2, metric1, Year, Rating.x) %>%
+  select(MovieID, Title, ratio, diff, ratio2, diff2, metric1, metric2, Year, Rating.x) %>%
   filter(Rating.x > 4.0) %>%
   arrange(desc(metric1))
-print(to_order, n=30)
+```
 
-head(tmp, n = 30)
-head(prev[!duplicated(prev$MovieID), ], n = 30)
+I inspected the results manually and rated the 5 methods subjectively based on
+my own impression of which movies I recognized as being popular in the 80s and 90s.
+I found that in my opinion the 5th method, the normalized difference, performed
+the best. Looking at the results below they're highly rated recognizable
+movies. Also of note is that the recommendations are not ranked in order of e.g.
+Year or Rating, so the algorithm is incorporating temporal information.
+
+This algorithm is a promising candidate for creating a trending algorithm
+that recommends relevant movies based on recent ratings activity.
+
+```{r}
+head(to_order, n=30)
 ```
 
 
-
-
-
-
-
-
-
-
-
-
+```{r eval=FALSE, include=FALSE}
+#head(tmp, n = 30)
+head(prev[!duplicated(prev$MovieID), ], n = 30)
+```
 
 
 
@@ -735,23 +856,6 @@ IBCF results depend on the ordering of the sorted nearest neighbors when there
 is a tie between two ratings. The different ordering of nearest neighbors
 keeps a different column in the items matrix and later when summing over the rows
 to form the prediction for a new user we get a slightly different result.
-
-
-
-
-
-
-```{r eval=FALSE, echo=FALSE, include=FALSE}
-blah = predict(recommender.UBCF, test, type="topN")
-# blah@itemLabels
-items = as.vector(blah@items$`0`)
-items
-ratings = as.vector(blah@ratings$`0`)
-ratings
-mids = movies$MovieID %in% items
-movies[mids, ]
-```
-
 
 
 
