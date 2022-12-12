@@ -1,3 +1,3 @@
 library(shiny)
-runApp("BookRecommender")
+runApp("MovieRecommender")
 #runApp("BookRecommender", display.mode = "showcase")
